@@ -1,4 +1,5 @@
 import cv2
+import torch
 import numpy as np
 from pathlib import Path
 from datetime import datetime
@@ -32,12 +33,14 @@ class AnomalyDetector:
 
     def _init_models(self):
         self.logger.info("Loading models...")
+        temporal_cfg = self.config["model"]["temporal"]
+        yolo_cfg = self.config["model"]["yolo"]
+
         self.yolo = YOLODetector(
-            model_path=self.config["model"]["yolo"]["model_path"],
-            confidence_threshold=self.config["model"]["yolo"]["confidence_threshold"],
+            model_path=yolo_cfg["model_path"],
+            confidence_threshold=yolo_cfg["confidence_threshold"],
             device=self.device,
         )
-        temporal_cfg = self.config["model"]["temporal"]
         self.extractor = TemporalFeatureExtractor(
             architecture=temporal_cfg["architecture"],
             device=self.device,
@@ -45,6 +48,10 @@ class AnomalyDetector:
         mil_model = MILRankingModel(
             input_dim=temporal_cfg["feature_dim"],
         )
+        mil_weights = temporal_cfg.get("model_path", "models/mil_model.pt")
+        if Path(mil_weights).exists():
+            mil_model.load_state_dict(torch.load(mil_weights, map_location=self.device, weights_only=True))
+            self.logger.info(f"Loaded MIL weights from {mil_weights}")
         self.mil = MILBagProcessor(mil_model, device=self.device)
         self.logger.info("Models loaded successfully")
 

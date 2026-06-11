@@ -4,7 +4,7 @@ import numpy as np
 
 
 class MILRankingModel(nn.Module):
-    def __init__(self, input_dim: int = 512, hidden_units: int = 256):
+    def __init__(self, input_dim: int = 1024, hidden_units: int = 256):
         super().__init__()
         self.classifier = nn.Sequential(
             nn.Linear(input_dim, hidden_units),
