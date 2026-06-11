@@ -1,0 +1,45 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Environments
+venv/
+.venv/
+env/
+.env
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Models (weights)
+models/*.pt
+models/*.pth
+
+# Evidence & Output
+evidence/*
+!evidence/.gitkeep
+
+# Sample videos (too large)
+sample_videos/*.mp4
+sample_videos/*.avi
+
+# Config (sensitive keys)
+config.yaml
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Docker
+.docker/
+
+# Logs
+*.log
+logs/
