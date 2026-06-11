@@ -17,6 +17,13 @@ class MILRankingModel(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.classifier(x)
 
+    def forward_raw(self, x: torch.Tensor) -> torch.Tensor:
+        h = self.classifier[0](x)
+        h = self.classifier[1](h)
+        h = self.classifier[2](h)
+        logits = self.classifier[3](h)
+        return logits
+
     def compute_ranking_loss(
         self, pos_scores: torch.Tensor, neg_scores: torch.Tensor, margin: float = 1.0
     ) -> torch.Tensor:

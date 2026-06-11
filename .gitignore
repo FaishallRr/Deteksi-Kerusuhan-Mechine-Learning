@@ -43,3 +43,16 @@ Thumbs.db
 # Logs
 *.log
 logs/
+
+# Large datasets
+ucf_crime_raw/
+features/
+
+# Temp test files
+test_*.py
+
+# Kaggle token
+.kaggle/
+
+# PyTorch downloads
+yolo11n.pt

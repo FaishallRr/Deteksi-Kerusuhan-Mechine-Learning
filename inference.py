@@ -47,6 +47,7 @@ class AnomalyDetector:
         )
         mil_model = MILRankingModel(
             input_dim=temporal_cfg["feature_dim"],
+            hidden_units=temporal_cfg.get("hidden_units", 512),
         )
         mil_weights = temporal_cfg.get("model_path", "models/mil_model.pt")
         if Path(mil_weights).exists():
