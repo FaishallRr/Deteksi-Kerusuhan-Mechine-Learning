@@ -71,13 +71,14 @@ class AnomalyDetector:
         return f"ALRT-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
 
     def _compute_fused_score(self, mil_score: float, yolo_objects: Dict) -> float:
-        w_mil = self.config["model"]["fusion"]["mil_weight"]
-        w_obj = self.config["model"]["fusion"]["object_weight"]
         has_weapons = len(yolo_objects.get("weapons", [])) > 0
         has_fight = len(yolo_objects.get("persons", [])) >= 2
-        obj_score = 0.5 + (0.5 if has_weapons else 0) + (0.3 if has_fight else 0)
-        obj_score = min(obj_score, 1.0)
-        return w_mil * mil_score + w_obj * obj_score
+        boost = 0.0
+        if has_weapons:
+            boost = 0.3
+        elif has_fight:
+            boost = 0.15
+        return min(mil_score + boost, 1.0)
 
     def _check_anti_spam(self) -> bool:
         now = datetime.now()
@@ -130,7 +131,7 @@ class AnomalyDetector:
             if not ret:
                 break
 
-            resized = cv2.resize(frame, (448, 448))
+            resized = cv2.resize(frame, (640, 640))
             frames_buffer.append(resized)
 
             if len(frames_buffer) >= 16:
@@ -174,7 +175,7 @@ class AnomalyDetector:
 
                 self.evidence.save_screenshot(frames_buffer[-1], report_id)
                 self.evidence.save_video_clip(
-                    list(self.score_buffer), report_id
+                    frames_buffer, report_id
                 )
 
                 plate_info = objects.get("plate", {})

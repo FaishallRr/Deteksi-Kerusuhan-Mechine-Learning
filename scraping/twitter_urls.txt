@@ -1,0 +1,10 @@
+# Twitter/X URLs with crime/riot/incident videos
+# One URL per line. Lines starting with # are ignored.
+# Scrape these from:
+#   Google search: site:x.com tawuran
+#   Google search: site:x.com perampokan
+#   Google search: site:x.com demo ricuh
+#
+# Known accounts (scraped automatically):
+#   https://x.com/TMCPoldaMetro
+#   https://x.com/DivHumas_Polri

@@ -21,7 +21,7 @@ def run_headless(detector, video_path: str):
         ret, frame = cap.read()
         if not ret:
             break
-        resized = cv2.resize(frame, (448, 448))
+        resized = cv2.resize(frame, (640, 640))
         frames_buffer.append(resized)
         total_frames += 1
 

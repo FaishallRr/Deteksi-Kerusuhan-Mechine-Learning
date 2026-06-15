@@ -1,0 +1,51 @@
+﻿# Daftar CCTV Pantau Semarang (livepantau.semarangkota.go.id)
+# Diperbarui: 15 Juni 2026
+# Sumber: https://pantausemar.semarangkota.go.id/
+# Format: (nama_tampilan, owner, url)
+
+CCTV_SEMARANG = [
+    ("THAMRIN PANDANARAN 360", "DINAS PERHUBUNGAN KOTA SEMARANG", "https://livepantau.semarangkota.go.id/e910f4f2-a77d-4cf8-8341-aa2e6c6b65c9/index.m3u8"),
+    ("Ki MANGUN SARKORO", "DINAS PERHUBUNGAN KOTA SEMARANG", "https://livepantau.semarangkota.go.id/47159b17-2776-4509-a9cd-363062084d80/index.m3u8"),
+    ("BANGKONG", "DINAS PERHUBUNGAN KOTA SEMARANG", "https://livepantau.semarangkota.go.id/bca0b6e3-434f-4617-a8d1-7de8dee4a1d8/index.m3u8"),
+    ("MILO", "DINAS PERHUBUNGAN KOTA SEMARANG", "https://livepantau.semarangkota.go.id/79c24687-f5f7-4822-8a5a-9007af0d7a09/index.m3u8"),
+    ("KALIBANTENG 2", "DINAS PERHUBUNGAN KOTA SEMARANG", "https://livepantau.semarangkota.go.id/1ba1a3b8-ff0b-4bbe-a1a1-ebb3ab40e6ed/index.m3u8"),
+    ("SIMP EXIT TOL KRAPYAK 360", "DINAS PERHUBUNGAN KOTA SEMARANG", "https://livepantau.semarangkota.go.id/79f0b673-df1b-470f-b3f1-5a81c7d2c578/index.m3u8"),
+    ("KARIADI", "DINAS PERHUBUNGAN KOTA SEMARANG", "https://livepantau.semarangkota.go.id/72246533-76a5-41e4-bce4-882f375d30b1/index.m3u8"),
+    ("GAJAHMADA", "DINAS PERHUBUNGAN KOTA SEMARANG", "https://livepantau.semarangkota.go.id/64ffd7f1-b0d6-412d-bfa9-6010365e9be8/index.m3u8"),
+    ("SP. AKPOL", "DINAS PERHUBUNGAN KOTA SEMARANG", "https://livepantau.semarangkota.go.id/18f688f5-1489-4459-9ce4-d5549a4da59b/index.m3u8"),
+    ("HANOMAN", "DINAS PERHUBUNGAN KOTA SEMARANG", "https://livepantau.semarangkota.go.id/24d5674c-1193-4a41-a101-2a8bb6d7898c/index.m3u8"),
+    ("BALAIKOTA", "DINAS PERHUBUNGAN KOTA SEMARANG", "https://livepantau.semarangkota.go.id/4e72ad43-f141-4a5f-8108-9e69e532b7c9/index.m3u8"),
+    ("Bea Cukai", "DINAS PERHUBUNGAN KOTA SEMARANG", "https://livepantau.semarangkota.go.id/2d79e358-6c83-49f0-83c2-77bf8d1c0e3d/index.m3u8"),
+    ("Tugumuda 2 Wide", "DINAS PERHUBUNGAN KOTA SEMARANG", "https://livepantau.semarangkota.go.id/aceb3f67-76ea-443c-941d-0b27ad2bae9f/index.m3u8"),
+    ("INDRAPRASTA-IMAM BONJOL", "DINAS PERHUBUNGAN KOTA SEMARANG", "https://livepantau.semarangkota.go.id/c17d3f13-338a-4656-b555-1dd1a18153f3/index.m3u8"),
+    ("SIMPANG THAMRIN", "DINAS PERHUBUNGAN KOTA SEMARANG", "https://livepantau.semarangkota.go.id/53c881b4-ef2f-41dd-9367-b4a7651bc168/index.m3u8"),
+    ("BATAN-THAMRIN", "DINAS PERHUBUNGAN KOTA SEMARANG", "https://livepantau.semarangkota.go.id/4cfc43e9-73a2-41e7-89d8-4f1132245876/index.m3u8"),
+    ("Exit Tol Srondol", "DINAS PERHUBUNGAN KOTA SEMARANG", "https://livepantau.semarangkota.go.id/1ace039c-1fb1-42d6-a787-7229fb63d1c1/index.m3u8"),
+    ("TUGUMUDA", "DINAS PERHUBUNGAN KOTA SEMARANG", "https://livepantau.semarangkota.go.id/41cc4b59-c86f-4307-939c-13a2026ff606/index.m3u8"),
+    ("KALIGARANG", "DINAS PERHUBUNGAN KOTA SEMARANG", "https://livepantau.semarangkota.go.id/82226691-f696-41eb-8a74-8b3c9d78b595/index.m3u8"),
+    ("TLOGOSARI", "DINAS PERHUBUNGAN KOTA SEMARANG", "https://livepantau.semarangkota.go.id/1e2d26a9-2fcb-4f22-b5f4-087bd22b352a/index.m3u8"),
+    ("TITIK NOL", "DPU KOTA SEMARANG", "https://livepantau.semarangkota.go.id/dc23feef-8cbd-4f67-8c46-382c691d5f09/index.m3u8"),
+    ("Jembatan Mberok", "DISKOMINFO KOTA SEMARANG", "https://livepantau.semarangkota.go.id/110c0652-bc7a-410b-9308-239ebd3e9e5c/index.m3u8"),
+    ("Fly Over Jatingaleh WIde", "DINAS PERHUBUNGAN KOTA SEMARANG", "https://livepantau.semarangkota.go.id/de90b316-e86b-4833-b27a-fa5fa3cb5501/index.m3u8"),
+    ("DPU-Kel.Wonosari", "DPU KOTA SEMARANG", "https://livepantau.semarangkota.go.id/6c239119-5ac2-49e3-8bf0-22f583e2bbdc/index.m3u8"),
+    ("DPU-Terowongan Soetta USM", "DPU KOTA SEMARANG", "https://livepantau.semarangkota.go.id/7601927a-ebc3-4452-9cc6-41d175f5fc64/index.m3u8"),
+    ("DPU_Pahlawan", "DPU KOTA SEMARANG", "https://livepantau.semarangkota.go.id/51e354eb-e854-45de-995b-78a4be3d2cf9/index.m3u8"),
+    ("Bukit Sari", "DINAS PERHUBUNGAN KOTA SEMARANG", "https://livepantau.semarangkota.go.id/05b532ed-de45-4c94-9cf3-6cb9d4161169/index.m3u8"),
+    ("Patung Diponegoro 360", "DINAS PERHUBUNGAN KOTA SEMARANG", "https://livepantau.semarangkota.go.id/a875df34-d235-4760-8c7f-2705fb155807/index.m3u8"),
+    ("Counting Krapyak", "DINAS PERHUBUNGAN KOTA SEMARANG", "https://livepantau.semarangkota.go.id/6237c48f-a8e8-46f8-bb7b-93641bb4fa8f/index.m3u8"),
+    ("Bawah Tol X3W_IN", "DPU KOTA SEMARANG", "https://livepantau.semarangkota.go.id/b1571bbc-a3f0-4dcd-b945-b178a0f9d91e/index.m3u8"),
+    ("Tugumuda 2", "DINAS PERHUBUNGAN KOTA SEMARANG", "https://livepantau.semarangkota.go.id/123d07e9-fc3c-4893-85ba-cc4a51a3905e/index.m3u8"),
+    ("PAHLAWAN PTZ 1", "DISKOMINFO KOTA SEMARANG", "https://livepantau.semarangkota.go.id/ce7f738e-7e30-4e64-888c-1bd22062f225/index.m3u8"),
+    ("PAHLAWAN PTZ 2", "DISKOMINFO KOTA SEMARANG", "https://livepantau.semarangkota.go.id/a5e69eea-cd60-4cb1-a51a-209ec3704a71/index.m3u8"),
+    ("PAHLAWAN 180", "DISKOMINFO KOTA SEMARANG", "https://livepantau.semarangkota.go.id/67e8ae0e-2ca1-4074-84fb-6a76503cd792/index.m3u8"),
+    ("ARAH TUGU TUNAS", "DISKOMINFO KOTA SEMARANG", "https://livepantau.semarangkota.go.id/1c874802-f4bd-47e6-8cd6-f14025691245/index.m3u8"),
+    ("JALAN SENDOWO", "DISKOMINFO KOTA SEMARANG", "https://livepantau.semarangkota.go.id/ed321633-2db0-4776-8a56-7ac44c870ba4/index.m3u8"),
+    ("MT Haryono", "DINAS PERHUBUNGAN KOTA SEMARANG", "https://livepantau.semarangkota.go.id/df53c838-efa5-460d-8f41-8a399e137c3b/index.m3u8"),
+    ("SRIWIJAYA 02", "DISKOMINFO KOTA SEMARANG", "https://livepantau.semarangkota.go.id/66632103-6b19-4f55-97b9-1d4ea18bb7c0/index.m3u8"),
+    ("SRIWIJAYA 01", "DISKOMINFO KOTA SEMARANG", "https://livepantau.semarangkota.go.id/481481b7-c444-499f-b32e-7445c29f48e9/index.m3u8"),
+    ("SIMPANG TENTREM MALL", "DISKOMINFO KOTA SEMARANG", "https://livepantau.semarangkota.go.id/1ecaa846-da47-4eae-b239-6625325f56a6/index.m3u8"),
+    ("ARAH PANDANARAN", "DISKOMINFO KOTA SEMARANG", "https://livepantau.semarangkota.go.id/81585de0-f70c-4e95-a330-4b3886ad644a/index.m3u8"),
+    ("METRO JOHAR", "DINAS PERHUBUNGAN KOTA SEMARANG", "https://livepantau.semarangkota.go.id/c7340916-43bd-46fa-a85f-48dd05d85d1c/index.m3u8"),
+]
+
+CCTV_NAMES = {name: url for name, owner, url in CCTV_SEMARANG}

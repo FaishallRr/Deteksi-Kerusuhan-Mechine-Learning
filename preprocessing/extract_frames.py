@@ -5,7 +5,7 @@ from typing import List, Optional
 
 
 class FrameExtractor:
-    def __init__(self, target_size: tuple = (448, 448), fps: int = 1):
+    def __init__(self, target_size: tuple = (640, 640), fps: int = 1):
         self.target_size = target_size
         self.fps = fps
 

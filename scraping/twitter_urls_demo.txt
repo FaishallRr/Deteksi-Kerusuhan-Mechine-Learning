@@ -1,0 +1,5 @@
+# Isi URL Twitter/X demo damai / demo rusuh di sini
+# Cara dapet: search site:x.com "demo damai Indonesia" atau site:x.com "demo rusuh"
+# Contoh:
+# https://x.com/user/status/123456789
+# https://x.com/user/status/987654321

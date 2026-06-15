@@ -11,7 +11,7 @@ from preprocessing.feature_extractor import TemporalFeatureExtractor
 class PreprocessingPipeline:
     def __init__(
         self,
-        target_size: Tuple[int, int] = (448, 448),
+        target_size: Tuple[int, int] = (640, 640),
         fps: int = 1,
         temporal_window: int = 16,
         device: str = "cpu",

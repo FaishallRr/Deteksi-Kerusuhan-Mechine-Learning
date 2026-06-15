@@ -1,81 +1,48 @@
-# 📊 PROGRESS — Deteksi Kerusuhan & Anomali
+# PROGRESS — Deteksi Kerusuhan & Anomali (CCTV)
 
-## Fase 1: Setup ✅
-- [x] Struktur direktori, config.yaml, requirements, Dockerfile, git init
+## Fase ML Temporal (MIL Model) ✅
 
-## Fase 2: Preprocessing Pipeline ✅
-- [x] FrameExtractor, S3D FeatureExtractor, pipeline lengkap
+| Stage | Status | ROC-AUC | F1 |
+|-------|--------|---------|----|
+| UCF-Crime Only | ✅ Selesai | 0.9984 | 0.9846 |
+| Combined (UCF+SCVD+Indo) | ⚠️ Contaminated | — | — |
+| Clean Training v2 | ✅ **FINAL** | **0.9976** | **0.9865** |
 
-## Fase 3: MIL Ranking Training (Synthetic) ✅
-- [x] Training dengan 10 video sintetis → akurasi 100%
+**Model**: `models/mil_model_v2_clean.pt` — digunakan di `inference.py` untuk file mode.
 
-## Fase 4: YOLOv11 Integration ✅
-- [x] YOLOv11-nano, face detection, LPR, score fusion, 5-layer anti false positive
+## Fase Real-time CCTV (ONNX + Streamlit) ✅
 
-## Fase 5: Alert System ✅
-- [x] Telegram + WhatsApp (graceful mock mode)
+### Tracking Status
 
-## Fase 6: Deployment ✅
-- [x] FastAPI, Streamlit dashboard, Dockerfile
+| Objek | Status | Detail |
+|-------|--------|--------|
+| 🚗 Mobil | ✅ **Smooth, akurat** | Alpha 0.15–0.40, velocity EMA 60/40 |
+| 🏍️ Motor | ✅ **Responsif, stabil** | Alpha 0.28–0.58, velocity EMA 50/50, predict 8% |
+| 🚚 Truck/Bus | ✅ **Akurat** | Class-size heuristic refinement |
+| 🚶 Person | ✅ | Detection + velocity tracking |
 
-## ✅ FASE 7: TRAINING DENGAN UCF-CRIME REAL ✅
-- [x] Download UCF-Crime dataset (12GB) dari Kaggle
-- [x] Preprocessing: 156 video → 3.458 S3D feature vectors (1024-d)
-- [x] Training MIL Ranking (500 epoch, early stopping at epoch 61)
+### Vehicle Classification
 
-### Hasil Training dengan UCF-Crime
-| Metrik | Hasil |
-|---|---|
-| **ROC-AUC** | **0.9984** |
-| **Precision** | **0.9860** |
-| **Recall** | **0.9832** |
-| **F1-Score** | **0.9846** |
-| **Accuracy** | **0.9788** |
-| False Positive | 5 dari 161 normal |
-| Missed Anomaly | 6 dari 358 anomaly |
+- YOLO11m COCO + heuristic refinement
+- Bicycle → selalu dikonversi ke motorcycle (konteks Indonesia)
+- Motorcycle → car hanya jika area > 12000px (fisik impossible)
+- Car → truck hanya jika area > 20000px + ratio > 2.0
+- Tidak ada catch-all `conf < 0.5 → vehicle` (label asli dipertahankan)
 
-### Confusion Matrix (Test Set)
-```
-                Predicted
-                Normal  Anomaly
-Actual Normal      156      5
-       Anomaly       6    352
-```
+### CCTV Pipeline
 
-### Inference Test (Real UCF-Crime Videos)
-| Video | Score | Correct |
-|---|---|---|
-| Fighting | 0.9846 | ✅ |
-| Assault | 1.0000 | ✅ |
-| Normal | 0.9446 | ❌ (1 FP) |
-| Robbery | 0.9905 | ✅ |
-| Shooting | 1.0000 | ✅ |
+| Komponen | Detail |
+|----------|--------|
+| **CCTV Active** | 42 kamera (12 mati dihapus Juni 2026) |
+| **Stream** | HLS m3u8 via `livepantau.semarangkota.go.id` |
+| **Player** | hls.js (Chrome/Edge) |
+| **Transport** | WebSocket ws://localhost:8765 |
+| **Model** | YOLO11m ONNX FP16, CUDA, ~45fps |
+| **Dashboard** | Streamlit 1.58.0, multi-camera grid |
 
-## 📁 Struktur Final
-```
-deteksi-kerusuhan/
-├── config.yaml                    # All configs
-├── inference.py                   # Main detection (YOLO + S3D + MIL)
-├── api_service.py                 # FastAPI
-├── app.py                         # Streamlit dashboard
-├── preprocessing/                 # Frame extraction, S3D features, UCF preprocessing
-├── core/                          # MIL ranking, YOLO detector, training
-├── alert/                         # Telegram + WhatsApp
-├── utils/                         # Config, logger, evidence
-├── models/
-│   ├── mil_model.pt              # Trained on synthetic
-│   ├── mil_model_ucf.pt         # Trained on UCF-Crime (BEST)
-│   ├── evaluation_results.json
-│   └── training_history.png
-├── features/ucf_crime/           # Precomputed features
-├── ucf_crime_raw/                # Raw UCF-Crime dataset
-├── sample_videos/                # Test videos
-├── evidence/                     # Alert evidence
-└── docs/                         # Documentation
-```
+## Next (Prioritas)
 
-## ⬜ NEXT
-- [ ] Scraping YouTube Indonesia untuk fine-tuning konteks lokal
-- [ ] Dokumentasi lengkap (docs/*.md untuk dosen)
-- [ ] Deploy Streamlit dashboard
-- [ ] Setup actual Telegram bot token
+1. **Sajam/Weapon Detection** — tuning threshold sajam CNN, reduce false positive, conf interval
+2. **Alert System** — Telegram + WhatsApp notification
+3. **Fight Detection** — temporal confirmation untuk kerusuhan
+4. **Long-run Stability** — FPS/memory monitoring, auto camera health check

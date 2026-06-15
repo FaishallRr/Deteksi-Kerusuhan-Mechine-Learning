@@ -26,9 +26,8 @@ models/*.pth
 evidence/*
 !evidence/.gitkeep
 
-# Sample videos (too large)
-sample_videos/*.mp4
-sample_videos/*.avi
+# Sample videos (too large, includes extracted frames)
+sample_videos/
 
 # Config (sensitive keys)
 config.yaml
@@ -54,5 +53,34 @@ test_*.py
 # Kaggle token
 .kaggle/
 
-# PyTorch downloads
+# Root models (too large for git)
 yolo11n.pt
+yolo11m.pt
+yolo11l.pt
+yolo11m.onnx
+yolo11s.onnx
+yolo11s.pt
+yolo26n.pt
+
+# Weapon dataset (Roboflow, ~55k images)
+Weapon-Detection-3/
+
+# Sajam training data (crops, google images)
+dataset/
+
+# YOLO training runs
+runs/
+
+# Training artifacts (eval results, history plots)
+models/evaluation_results*.json
+models/training_history*.png
+models/training_history*.npz
+
+# Binary/external tools
+bin/
+
+# Streamlit local config
+.streamlit/
+
+# Curation decisions (generated)
+curation/decisions.csv
