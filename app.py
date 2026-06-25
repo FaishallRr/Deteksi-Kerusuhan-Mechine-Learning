@@ -7,10 +7,13 @@ from collections import deque
 import tempfile
 import json
 import threading
+import warnings
+import streamlit.components.v1 as components
 
 from ws_detect_server import start_ws_server as _start_ws
+from api_service import start_api as _start_api
 
-# Start detection WebSocket server (global, once per process)
+# Start background servers (global, once per process)
 if not getattr(threading, "_detect_ws_started", False):
     threading._detect_ws_started = True
     try:
@@ -18,6 +21,11 @@ if not getattr(threading, "_detect_ws_started", False):
         t.start()
     except Exception as e:
         print(f"[WARN] Could not start detect WS server: {e}")
+    try:
+        t = threading.Thread(target=_start_api, args=("0.0.0.0", 8000), daemon=True)
+        t.start()
+    except Exception as e:
+        print(f"[WARN] Could not start API server: {e}")
 
 from inference import AnomalyDetector
 from utils.config_loader import load_config
@@ -45,14 +53,24 @@ st.sidebar.header("Konfigurasi")
 
 source_mode = st.sidebar.radio("Sumber Video", ["CCTV Langsung", "File Video"])
 
-def _build_hls_html(stream_url, cam_name, detect_host="http://localhost:8765"):
+def _proxy_url(direct_url):
+    """Convert direct CCTV URL to local proxy URL (bypass CORS)."""
+    prefix = "https://livepantau.semarangkota.go.id/"
+    if direct_url.startswith(prefix):
+        rest = direct_url[len(prefix):]
+        return f"http://localhost:8000/hls-proxy/{rest}"
+    return direct_url
+
+
+def _build_hls_html(stream_url, cam_name, cam_index=0, detect_host="http://localhost:8765"):
     LOCATION = "Kota Semarang, Jawa Tengah"
+    proxy_url = _proxy_url(stream_url)
     return f"""<!DOCTYPE html>
 <html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+<script src="http://localhost:8000/static/hls.min.js"></script>
 <style>
 * {{ margin:0; padding:0; box-sizing:border-box; }}
 html,body {{ width:100%; height:100%; background:#000; overflow:hidden; font-family:Arial,sans-serif; }}
@@ -356,7 +374,8 @@ try {{
     }}
 }} catch(e) {{}}
 
-var streamUrl = '{stream_url}';
+var streamUrl = '{proxy_url}';
+var camIndex = {cam_index};
 var hls = null;
 var hlsRetries = 0;
 var MAX_HLS_RETRIES = 3;
@@ -378,12 +397,19 @@ function setupHLS(url) {{
             hls = new Hls({{
                 enableWorker: false,
                 lowLatencyMode: false,
-                backBufferLength: 30,
-                maxBufferLength: 30,
-                manifestLoadingTimeOut: 10000,
-                levelLoadingTimeOut: 10000,
-                fragLoadingTimeOut: 15000,
+                backBufferLength: 60,
+                maxBufferLength: 60,
+                maxMaxBufferLength: 120,
+                manifestLoadingTimeOut: 30000,
+                levelLoadingTimeOut: 30000,
+                fragLoadingTimeOut: 30000,
+                fragLoadingMaxRetry: 10,
+                fragLoadingRetryDelay: 500,
+                manifestLoadingMaxRetry: 10,
+                levelLoadingMaxRetry: 10,
                 enableDateRangeTag: false,
+                startFragPrefetch: true,
+                startLevel: 0,
             }});
             hls.on(Hls.Events.MEDIA_ATTACHED, function() {{
                 console.log('[HLS] Media attached');
@@ -406,21 +432,26 @@ function setupHLS(url) {{
                 }}
             }});
             hls.on(Hls.Events.ERROR, function(evt, data) {{
-                console.warn('[HLS] Error:', data.type, data.details, data.fatal);
+                console.warn('[HLS] Error:', data.type, data.details, data.fatal, data);
+                if (data.type === 'networkError' && (data.details === 'fragLoadError' || data.details === 'fragParsingError' || data.details === 'fragLoadTimeOut')) {{
+                    // segment errors are often non-fatal — try next segment
+                    return;
+                }}
                 if (data.fatal) {{
                     hlsRetries++;
                     if (hlsRetries <= MAX_HLS_RETRIES) {{
                         connStatus.textContent = '\\u26a0\\ufe0f Error: ' + (data.details || 'unknown') + ' (percobaan ' + hlsRetries + '/' + MAX_HLS_RETRIES + ')';
                         loading.textContent = 'Koneksi terputus. Mencoba reconnect dalam 3 detik...';
                         loading.classList.remove('hidden');
-                        setTimeout(function() {{ setupHLS(url); }}, 3000);
+                        setTimeout(function() {{ setupHLS(url); }}, 2000 + camIndex * 500);
                     }} else {{
-                        loading.textContent = 'Camera offline - gagal setelah ' + MAX_HLS_RETRIES + ' percobaan';
+                        loading.innerHTML = '<div style=\"display:flex;align-items:center;justify-content:center;height:100vh;color:#555;font-size:16px;\">📷 Offline</div>';
+                        loading.classList.remove('hidden');
                         connStatus.textContent = '\\u274c Offline';
                         streamActive = false;
                     }}
                 }} else {{
-                    connStatus.textContent = '\\u26a0\\ufe0f ' + (data.details || 'buffer issue');
+                    // non-fatal — skip visual feedback, just log
                 }}
             }});
             hls.loadSource(url);
@@ -438,8 +469,7 @@ function setupHLS(url) {{
     }});
 }}
 
-setupHLS(streamUrl);
-renderLoop();
+setTimeout(function() {{ setupHLS(streamUrl); }}, camIndex * 2500);
 renderLoop();
 
 window.addEventListener('resize', resizeCanvas);
@@ -607,33 +637,21 @@ if source_mode == "File Video":
         st.caption(f"Alert via: Telegram & WhatsApp")
 
 else:
-    st.sidebar.subheader("Pilih CCTV")
-    cam_names = list(CCTV_NAMES.keys())
-    selected_cams = st.sidebar.multiselect(
-        "Pilih Kamera",
-        options=cam_names,
-        default=cam_names[:2] if len(cam_names) >= 2 else cam_names,
-    )
+    st.subheader("📹 CCTV Langsung - Kota Semarang")
+    cam_items = list(CCTV_NAMES.items())
+    n_cams = len(cam_items)
+    cols_per_row = 3
 
-    selected_urls = {name: CCTV_NAMES[name] for name in selected_cams}
-    st.sidebar.caption(f"Total kamera aktif: {len(selected_urls)}")
-    st.sidebar.caption("Deteksi berjalan via WebSocket ws://localhost:8765")
-
-    if selected_urls:
-        cam_names_list = list(selected_urls.keys())
-        n_cams = len(cam_names_list)
-        cols_per_row = min(3, n_cams)
-        rows = (n_cams + cols_per_row - 1) // cols_per_row
-
-        for r in range(rows):
-            row_cams = cam_names_list[r * cols_per_row:(r + 1) * cols_per_row]
-            cols = st.columns(cols_per_row)
-            for ci, cam_name in enumerate(row_cams):
-                with cols[ci]:
-                    html = _build_hls_html(selected_urls[cam_name], cam_name)
-                    st.components.v1.html(html, height=360, scrolling=False)
-    else:
-        st.info("Pilih minimal 1 kamera CCTV dari sidebar")
+    for i in range(0, n_cams, cols_per_row):
+        row_items = cam_items[i:i + cols_per_row]
+        cols = st.columns(cols_per_row)
+        for ci, (cam_name, cam_url) in enumerate(row_items):
+            with cols[ci]:
+                idx = i + ci
+                html = _build_hls_html(cam_url, cam_name, cam_index=idx)
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore", DeprecationWarning)
+                    components.html(html, height=360, scrolling=False)
 
 st.markdown("---")
 st.caption(

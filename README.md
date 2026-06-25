@@ -37,7 +37,7 @@ Deteksi kerusuhan, kekerasan, dan anomali dari **CCTV Semarang live 24/7** mengg
 
 ## Fitur
 
-- **Live HLS CCTV** — 42 kamera Semarang aktif, play via hls.js
+- **Live HLS CCTV** — 14 kamera Semarang terverifikasi (DPU + DISKOMINFO), play via hls.js
 - **Real-time Detection** — YOLO11m ONNX FP16 ~45fps (CUDA)
 - **Anomaly Scoring** — 5 komponen: weapon(30%) + crowd(20%) + speed(15%) + proximity(20%) + vehicle(15%)
 - **Status HUD** — 🟢 NORMAL / 🟠 MENCURIGAKAN / 🔴 BAHAYA
@@ -57,12 +57,12 @@ Deteksi kerusuhan, kekerasan, dan anomali dari **CCTV Semarang live 24/7** mengg
 | Area | Detail |
 |------|--------|
 | **YOLO11m ONNX FP16** | Pipeline ~22ms/frame (~45fps). Conf threshold 0.15 untuk deteksi jarak jauh |
-| **imgsz=800** | Auto-fallback ke 640 jika ONNX reject shape. Objek kecil 1.56x lebih besar |
+| **imgsz=800 auto-fallback** | Try imgsz=800, fallback ke 640 jika ONNX reject. Objek kecil 1.56x lebih besar di feature map |
 | **Enhanced Anomaly** | Person velocity tracking, crowd density, weapon proximity, vehicle anomaly (5 komponen scoring) |
 | **JS Tracking** | Class-specific smoothing: mobil alpha 0.15–0.40, motor alpha 0.28–0.58. Velocity EMA, zombie revival (100px), duplicate cleanup (60px) |
 | **Motorcycle Tracking** | Stabil — velocity EMA 50/50, predict 8%, alpha 0.28–0.58, size smoothing 0.15 |
 | **Vehicle Classifier** | YOLO heuristic refinement: threshold realistic (motor→car only if >12000px), bicycle→motorcycle, car→truck if >20000px |
-| **CCTV Sources** | 42 kamera hidup (12 mati dihapus). Format HLS m3u8 via `livepantau.semarangkota.go.id` |
+| **CCTV Sources** | 14 kamera terverifikasi (playlist + segmen video OK). DPU 5 + DISKOMINFO 9 |
 | **HLS Error Handling** | 3x retry, timeout config, "Camera offline" setelah gagal |
 | **WebSocket Server** | Asyncio-based, multiple clients, binary JPEG → JSON detection |
 | **MIL Temporal Model** | Training final — ROC-AUC 0.9976, F1 0.9865 (file mode) |
@@ -132,7 +132,7 @@ C:\Python314\python.exe -m streamlit run app.py
 | `app.py` | Streamlit dashboard, HLS HTML builder, JS tracking code, multi-camera grid |
 | `ws_detect_server.py` | WebSocket server, YOLODetector, anomaly scoring, NMS |
 | `core/yolo_detector.py` | YOLO11m ONNX + Indo weapon + Sajam CNN verifier |
-| `cctv_sources.py` | 42 CCTV Semarang URL (HLS m3u8) |
+| `cctv_sources.py` | 14 CCTV Semarang terverifikasi (HLS m3u8) |
 | `inference.py` | AnomalyDetector class — MIL temporal fusion untuk file mode |
 | `config.yaml` | Konfigurasi utama (threshold, model path, alert settings) |
 | `core/sajam_cnn_verify.pt` | CNN verifier untuk senjata tajam (64×64 input) |
@@ -200,3 +200,4 @@ Di JS tracking (app.py):
 - **st.components.v1.html deprecated**: Akan dihapus setelah 2026-06-01. Migrasi ke `st.iframe` direncanakan
 - **Segmen HLS ~4 detik**: CCTV Semarang pakai segmen panjang bukan real-time chunked
 - **Model path**: YOLO model `yolo11m.onnx` di root project, bukan di `models/`
+- **HLS retries**: 3x percobaan dengan stagger delay (camIndex × 500ms)

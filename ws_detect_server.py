@@ -8,11 +8,41 @@ import os
 import psutil
 from datetime import datetime
 from collections import deque
-from core.yolo_detector import YOLODetector
+from pathlib import Path
+import torch
 import threading
 
-detector = YOLODetector("yolo11m.onnx", confidence_threshold=0.15, device="cuda")
-score_buffer = deque(maxlen=10)
+from core.yolo_detector import YOLODetector
+from preprocessing.feature_extractor import TemporalFeatureExtractor
+from core.mil_ranking import MILRankingModel, MILBagProcessor
+from utils.config_loader import load_config
+
+# Load config
+config = load_config("config.yaml")
+_threshold_alert = config["thresholds"]["alert"]
+_threshold_warning = config["thresholds"]["warning"]
+_device = config["general"]["device"]
+
+detector = YOLODetector(
+    config["model"]["yolo"]["model_path"],
+    confidence_threshold=config["model"]["yolo"]["confidence_threshold"],
+    device=_device,
+    indo_model_path=config["model"]["yolo"]["indo_model_path"],
+)
+
+temporal_cfg = config["model"]["temporal"]
+mil_extractor = TemporalFeatureExtractor(architecture=temporal_cfg["architecture"], device=_device)
+
+_mil_model = MILRankingModel(
+    input_dim=temporal_cfg["feature_dim"],
+    hidden_units=temporal_cfg.get("hidden_units", 512),
+)
+mil_weights = temporal_cfg["model_path"]
+if Path(mil_weights).exists():
+    _mil_model.load_state_dict(torch.load(mil_weights, map_location=_device, weights_only=True))
+mil_processor = MILBagProcessor(_mil_model, device=_device)
+
+score_buffer = deque(maxlen=config["thresholds"]["confirmation_frames"])
 buffer_lock = threading.Lock()
 
 _server_start = time.time()
@@ -175,6 +205,10 @@ async def handler(websocket):
     print(f"[WS] Client#{cid} connected: {addr}")
     frames = 0
     t0 = time.time()
+    
+    # client-specific temporal buffer
+    client_frame_buffer = deque(maxlen=config["preprocessing"]["temporal_window"])
+
     try:
         async for message in websocket:
             if not isinstance(message, (bytes, bytearray)):
@@ -187,6 +221,10 @@ async def handler(websocket):
 
             if cv2.mean(frame)[0] < 5:
                 continue
+                
+            # Store resized frame for MIL
+            resized_for_mil = cv2.resize(frame, tuple(config["preprocessing"]["frame_size"]))
+            client_frame_buffer.append(resized_for_mil)
 
             yolo_objects = detector.detect(frame)
 
@@ -227,14 +265,24 @@ async def handler(websocket):
                 person_velocities, close_pairs, n_p
             )
 
+            # Integrate MIL score
+            mil_score = 0.0
+            if len(client_frame_buffer) == config["preprocessing"]["temporal_window"]:
+                mil_features = mil_extractor.extract(list(client_frame_buffer))
+                mil_score = mil_processor.predict_bag(mil_features)
+                
+                mil_weight = config["model"]["fusion"]["mil_weight"]
+                object_weight = config["model"]["fusion"]["object_weight"]
+                fused_score = (mil_score * mil_weight) + (fused_score * object_weight)
+
             with buffer_lock:
                 score_buffer.append(fused_score)
                 recent = list(score_buffer)
-                is_alert = fused_score >= 0.6 and len(recent) >= 8 and all(s >= 0.55 for s in recent[-8:])
+                is_alert = fused_score >= _threshold_alert and len(recent) >= config["thresholds"]["confirmation_frames"] and all(s >= _threshold_alert for s in recent)
 
-            if fused_score >= 0.7:
+            if fused_score >= _threshold_alert:
                 status = "bahaya"
-            elif fused_score >= 0.4:
+            elif fused_score >= _threshold_warning:
                 status = "mencurigakan"
             else:
                 status = "normal"
@@ -256,27 +304,6 @@ async def handler(websocket):
                 x1, y1, x2, y2 = map(int, f["bbox"])
                 if (x2 - x1) * (y2 - y1) < 100: continue
                 boxes.append({"x": x1, "y": y1, "w": x2 - x1, "h": y2 - y1, "t": "face", "c": f["confidence"]})
-
-            if len(boxes) > 1:
-                boxes.sort(key=lambda b: -b["c"])
-                keep = [True] * len(boxes)
-                for i in range(len(boxes)):
-                    if not keep[i]:
-                        continue
-                    bi = boxes[i]
-                    for j in range(i + 1, len(boxes)):
-                        if not keep[j]:
-                            continue
-                        bj = boxes[j]
-                        ix1 = max(bi["x"], bj["x"]); iy1 = max(bi["y"], bj["y"])
-                        ix2 = min(bi["x"] + bi["w"], bj["x"] + bj["w"]); iy2 = min(bi["y"] + bi["h"], bj["y"] + bj["h"])
-                        iw = max(0, ix2 - ix1); ih = max(0, iy2 - iy1)
-                        inter = iw * ih
-                        union = bi["w"] * bi["h"] + bj["w"] * bj["h"] - inter
-                        iou = inter / union if union > 0 else 0
-                        if iou > 0.25 or (bi["t"] == bj["t"] and iou > 0.15):
-                            keep[j] = False
-                boxes = [b for i, b in enumerate(boxes) if keep[i]]
 
             response = {
                 "type": "detection",

@@ -43,15 +43,15 @@ class SajamVerifier(nn.Module):
 
 
 class YOLODetector:
-    def __init__(self, model_path: str, confidence_threshold: float = 0.5, device: str = "cpu"):
+    def __init__(self, model_path: str, confidence_threshold: float = 0.5, device: str = "cpu", indo_model_path: str = "models/yolo11n_indo.pt"):
         from ultralytics import YOLO
-        self.base_model = YOLO("yolo11m.onnx")
+        import os
+        self.base_model = YOLO(model_path, task="detect")
         self.confidence_threshold = confidence_threshold
         self.device = device
 
-        self.indo_model_path = "models/yolo11n_indo.pt"
-        import os
-        self.indo_model = YOLO(self.indo_model_path) if os.path.exists(self.indo_model_path) else None
+        self.indo_model_path = indo_model_path
+        self.indo_model = YOLO(self.indo_model_path, task="detect") if os.path.exists(self.indo_model_path) else None
         if self.indo_model:
             print(f"[YOLO] Loaded Indo weapon model ({list(self.indo_model.names.values())})")
 

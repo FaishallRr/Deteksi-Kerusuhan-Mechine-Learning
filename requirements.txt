@@ -40,7 +40,12 @@ easyocr>=1.7.0
 pytesseract>=0.3.10
 
 # Face Detection
-retinaface>0.0.1
+# retinaface>0.0.1 (commented out due to tf dependency conflict)
 
 # Logging
 loguru>=0.7.0
+
+# CCTV / Streaming
+httpx>=0.25.0
+websockets>=12.0
+psutil>=5.9.0

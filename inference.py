@@ -40,6 +40,7 @@ class AnomalyDetector:
             model_path=yolo_cfg["model_path"],
             confidence_threshold=yolo_cfg["confidence_threshold"],
             device=self.device,
+            indo_model_path=yolo_cfg.get("indo_model_path", "models/yolo11n_indo.pt"),
         )
         self.extractor = TemporalFeatureExtractor(
             architecture=temporal_cfg["architecture"],
@@ -49,7 +50,7 @@ class AnomalyDetector:
             input_dim=temporal_cfg["feature_dim"],
             hidden_units=temporal_cfg.get("hidden_units", 512),
         )
-        mil_weights = temporal_cfg.get("model_path", "models/mil_model.pt")
+        mil_weights = temporal_cfg["model_path"]
         if Path(mil_weights).exists():
             mil_model.load_state_dict(torch.load(mil_weights, map_location=self.device, weights_only=True))
             self.logger.info(f"Loaded MIL weights from {mil_weights}")
