@@ -337,10 +337,14 @@ elif page == "Demo Model":
     tab_demo, tab_batch = st.tabs(["Single Video Demo", "Batch Test Set Evaluation"])
 
     with tab_demo:
-        st.markdown("### Pilih Sample Video untuk Diuji")
+        st.markdown("### Pipeline Deteksi Kerusuhan")
         st.markdown(
-            "Model akan memproses fitur S3D dari video dan memberikan skor kerusuhan. "
-            "Skor ≥ 0.5 berarti **RUSUH**, skor < 0.5 berarti **NORMAL/DAMAI**."
+            "**Alur:** Video → Ekstraksi fitur S3D (16 segmen × 1024-d) "
+            "→ AttentionMIL → Skor Anomali [0-1]"
+        )
+        st.markdown(
+            "Pilih sample dari **559 video test**. Model akan memproses fitur "
+            "yang sudah diekstrak dan menampilkan hasil prediksi."
         )
 
         df, meta = load_metadata()
@@ -350,31 +354,14 @@ elif page == "Demo Model":
         normal_items = [m for m in test_items if m["label"] == 0]
         rusuh_items = [m for m in test_items if m["label"] == 1]
 
-        col1, col2 = st.columns(2)
-        with col1:
-            st.markdown("**Sample Normal/Damai**")
-            sample_normal = st.selectbox(
-                "Pilih video normal:", 
-                [Path(m["path"]).name for m in normal_items[:20]],
-                key="normal_select",
-                label_visibility="collapsed"
-            )
-
-        with col2:
-            st.markdown("**Sample Rusuh**")
-            sample_rusuh = st.selectbox(
-                "Pilih video rusuh:",
-                [Path(m["path"]).name for m in rusuh_items[:20]],
-                key="rusuh_select",
-                label_visibility="collapsed"
-            )
-
         selected_type = st.radio("Pilih tipe video:", ["Normal/Damai", "Rusuh"], horizontal=True)
+        items_pool = normal_items if selected_type == "Normal/Damai" else rusuh_items
 
-        if selected_type == "Normal/Damai":
-            selected_item = next(m for m in normal_items if Path(m["path"]).name == sample_normal)
-        else:
-            selected_item = next(m for m in rusuh_items if Path(m["path"]).name == sample_rusuh)
+        selected_item = st.selectbox(
+            "Pilih sample (nama fitur):",
+            items_pool,
+            format_func=lambda x: Path(x["path"]).stem,
+        )
 
         if st.button("🔍 Predict", type="primary", use_container_width=True):
             feat = np.load(selected_item["path"])
@@ -386,44 +373,54 @@ elif page == "Demo Model":
             score = torch.sigmoid(logits).item()
             pred_label = "🔴 RUSUH" if score >= 0.5 else "🟢 NORMAL/DAMAI"
             confidence = max(score, 1 - score)
-
             true_label = "RUSUH" if selected_item["label"] == 1 else "NORMAL/DAMAI"
             correct = (score >= 0.5) == (selected_item["label"] == 1)
 
             st.markdown("---")
 
-            # Score gauge
-            fig = go.Figure(go.Indicator(
-                mode="gauge+number+delta",
-                value=score,
-                domain={"x": [0, 1], "y": [0, 1]},
-                title={"text": "Anomaly Score", "font": {"size": 24}},
-                delta={"reference": 0.5, "increasing": {"color": "red"},
-                       "decreasing": {"color": "green"}},
-                gauge={
-                    "axis": {"range": [0, 1], "tickwidth": 1},
-                    "bar": {"color": "red" if score >= 0.5 else "green"},
-                    "steps": [
-                        {"range": [0, 0.5], "color": "lightgreen"},
-                        {"range": [0.5, 1], "color": "lightcoral"},
-                    ],
-                    "threshold": {
-                        "line": {"color": "black", "width": 4},
-                        "thickness": 0.75, "value": 0.5
+            # Two columns: pipeline diagram + results
+            col_res, col_gauge = st.columns([1, 1])
+
+            with col_gauge:
+                fig = go.Figure(go.Indicator(
+                    mode="gauge+number+delta",
+                    value=score,
+                    title={"text": "Anomaly Score", "font": {"size": 20}},
+                    delta={"reference": 0.5, "increasing": {"color": "red"},
+                           "decreasing": {"color": "green"}},
+                    gauge={
+                        "axis": {"range": [0, 1]},
+                        "bar": {"color": "red" if score >= 0.5 else "green"},
+                        "steps": [
+                            {"range": [0, 0.5], "color": "lightgreen"},
+                            {"range": [0.5, 1], "color": "lightcoral"},
+                        ],
+                        "threshold": {
+                            "line": {"color": "black", "width": 4},
+                            "thickness": 0.75, "value": 0.5
+                        }
                     }
-                }
-            ))
-            fig.update_layout(height=350)
-            st.plotly_chart(fig, use_container_width=True)
+                ))
+                fig.update_layout(height=280)
+                st.plotly_chart(fig, use_container_width=True)
 
-            col_r1, col_r2, col_r3, col_r4 = st.columns(4)
-            col_r1.metric("Prediction", pred_label)
-            col_r2.metric("Confidence", f"{confidence:.2%}")
-            col_r3.metric("True Label", true_label)
-            col_r4.metric("Status", "✅ Correct" if correct else "❌ Wrong",
-                          delta_color="off")
+            with col_res:
+                st.markdown("### Hasil Prediksi")
+                col_r1, col_r2 = st.columns(2)
+                col_r1.metric("Prediction", pred_label)
+                col_r2.metric("Confidence", f"{confidence:.2%}")
+                col_r3, col_r4 = st.columns(2)
+                col_r3.metric("True Label", true_label)
+                col_r4.metric("Status", "✅ Correct" if correct else "❌ Wrong")
 
-            # Segment-level attention
+                st.markdown("---")
+                st.markdown("**Detail Input:**")
+                st.markdown(f"- Nama: `{Path(selected_item['path']).stem}`")
+                st.markdown(f"- Sumber: {selected_item.get('source', 'unknown')}")
+                st.markdown(f"- Segmen: {n_seg}")
+
+            # Score evolution chart
+            st.subheader("Segment-Level Score Evolution")
             feat_all = np.load(selected_item["path"])
             n_seg_all = min(16, feat_all.shape[0])
             seg_scores = []
@@ -433,15 +430,21 @@ elif page == "Demo Model":
                     s = torch.sigmoid(model(f_t)).item()
                 seg_scores.append(s)
 
-            st.subheader("Segment-Level Scores")
-            fig, ax = plt.subplots(figsize=(10, 3))
-            colors_seg = ["red" if s >= 0.5 else "green" for s in seg_scores]
-            ax.bar(range(n_seg_all), seg_scores, color=colors_seg, alpha=0.8)
-            ax.axhline(0.5, color="gray", ls="--", label="threshold")
-            ax.set_xlabel("Segment Index"); ax.set_ylabel("Score")
-            ax.set_title("Per-Segment Anomaly Scores")
-            ax.legend(); ax.set_ylim(0, 1)
+            fig, ax = plt.subplots(figsize=(10, 3.5))
+            colors_seg = ["#e74c3c" if s >= 0.5 else "#2ecc71" for s in seg_scores]
+            bars = ax.bar(range(n_seg_all), seg_scores, color=colors_seg, alpha=0.85, edgecolor="white")
+            ax.axhline(0.5, color="gray", ls="--", lw=2, label="Threshold = 0.5")
+            ax.set_xlabel("Segment Index"); ax.set_ylabel("Anomaly Score")
+            ax.set_title("Per-Segment Anomaly Scores", fontweight="bold")
+            ax.legend(); ax.set_ylim(0, 1); ax.set_xticks(range(n_seg_all))
             st.pyplot(fig)
+
+            st.caption(
+                "**Cara membaca:** Setiap bar mewakili skor 1 segmen (16 frame). "
+                "Bar merah = segmen terdeteksi sebagai rusuh. Bar hijau = segmen normal. "
+                "Model menggabungkan semua segmen dengan attention weights untuk "
+                "menghasilkan prediksi akhir."
+            )
 
     with tab_batch:
         st.markdown("### Test Set Batch Evaluation")
