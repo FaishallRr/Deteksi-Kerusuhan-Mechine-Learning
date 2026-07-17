@@ -357,10 +357,20 @@ elif page == "Demo Model":
             normal_demos = [m for m in demo_meta if m["label"] == 0]
             rusuh_demos = [m for m in demo_meta if m["label"] == 1]
 
-            demo_type = st.radio("Pilih tipe video:", ["Normal/Damai", "Rusuh"], horizontal=True, key="demo_type")
-            demo_pool = normal_demos if demo_type == "Normal/Damai" else rusuh_demos
+            demo_type = st.radio("Pilih tipe video:", ["Rusuh (dengan video)", "Normal/Damai (fitur)"], horizontal=True, key="demo_type")
 
-            if demo_pool:
+            if demo_type == "Rusuh (dengan video)":
+                demo_pool = rusuh_demos
+                show_video = True
+            else:
+                st.info(
+                    "📹 Video normal H.264 tidak tersedia. "
+                    "Gunakan tab **Feature Demo** untuk menguji video normal."
+                )
+                demo_pool = []
+                show_video = False
+
+            if demo_pool and show_video:
                 selected_demo = st.selectbox(
                     "Pilih video:",
                     demo_pool,
