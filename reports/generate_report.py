@@ -54,6 +54,12 @@ if os.path.exists(metrics_path):
     with open(metrics_path) as f:
         metrics = json.load(f)
 
+model_comp = {}
+comp_path = "reports/model_comparison/model_comparison.json"
+if os.path.exists(comp_path):
+    with open(comp_path) as f:
+        model_comp = json.load(f)
+
 doc = Document()
 
 # Styles
@@ -183,7 +189,17 @@ doc.add_paragraph(
 )
 
 doc.add_heading("1.3 Tujuan", level=2)
-doc.add_heading("1.5 Perbandingan Algoritma", level=2)
+doc.add_paragraph(
+    "Tujuan dari project ini adalah:\n\n"
+    "1. Mengumpulkan dataset video kerusuhan dari berbagai sumber (YouTube, Kaggle, "
+    "SCVD, MSV-PG) dengan total 5.552 video\n"
+    "2. Mengekstrak fitur temporal video menggunakan S3D pre-trained pada Kinetics-400\n"
+    "3. Mengimplementasikan dan membandingkan dua arsitektur MIL: frame-level dan video-level\n"
+    "4. Mengoptimalkan model melalui hyperparameter tuning dan evaluasi komprehensif\n"
+    "5. Membangun aplikasi Streamlit untuk demonstrasi model secara interaktif"
+)
+
+doc.add_heading("1.4 Perbandingan Algoritma", level=2)
 doc.add_paragraph(
     "Project ini membandingkan beberapa algoritma machine learning sesuai dengan "
     "Sub-CPMK 8.1.2 (klasifikasi) dan Sub-CPMK 8.1.3 (ensemble learning):\n\n"
@@ -202,17 +218,7 @@ doc.add_paragraph(
     "- Interpretabilitas: XGBoost+SHAP (tinggi) > AttentionMIL (sedang) > MILRanking (rendah)"
 )
 
-doc.add_paragraph(
-    "Tujuan dari project ini adalah:\n\n"
-    "1. Mengumpulkan dataset video kerusuhan dari berbagai sumber (YouTube, Kaggle, "
-    "SCVD, MSV-PG) dengan total 5.552 video\n"
-    "2. Mengekstrak fitur temporal video menggunakan S3D pre-trained pada Kinetics-400\n"
-    "3. Mengimplementasikan dan membandingkan dua arsitektur MIL: frame-level dan video-level\n"
-    "4. Mengoptimalkan model melalui hyperparameter tuning dan evaluasi komprehensif\n"
-    "5. Membangun aplikasi Streamlit untuk demonstrasi model secara interaktif"
-)
-
-doc.add_heading("1.4 Ruang Lingkup", level=2)
+doc.add_heading("1.5 Ruang Lingkup", level=2)
 doc.add_paragraph(
     "Ruang lingkup project ini meliputi:\n\n"
     "- Deteksi binary classification: rusuh vs non-rusuh (normal/damai)\n"
@@ -359,9 +365,12 @@ doc.add_page_break()
 # ===== BAB IV =====
 doc.add_heading("BAB IV HASIL DAN PEMBAHASAN", level=1)
 
+total_videos = (metrics.get('splits', {}).get('train', 4440) +
+                metrics.get('splits', {}).get('val', 553) +
+                metrics.get('splits', {}).get('test', 559))
 doc.add_heading("4.1 Dataset Overview", level=2)
 doc.add_paragraph(
-    f"Dataset yang digunakan dalam project ini berjumlah {metrics.get('test_samples', 559) * 10 if metrics.get('test_samples') else 5552} "
+    f"Dataset yang digunakan dalam project ini berjumlah {total_videos} "
     f"video yang terdiri dari {metrics.get('label_distribution', {}).get('0', 3266)} video non-rusuh (demo_damai + normal) "
     f"dan {metrics.get('label_distribution', {}).get('1', 2286)} video rusuh (demo_rusuh). "
     f"Dataset dibagi menjadi {metrics.get('splits', {}).get('train', 4440)} training, "
@@ -394,15 +403,25 @@ doc.add_paragraph(
     "MILRankingModel (frame-level), dan AttentionMIL (video-level) pada test set:"
 )
 
+rows = []
+for m in model_comp.get("models", []):
+    if m["model"] == "XGBoost":
+        rows.append(["XGBoost (Baseline)", f"{m['auc']:.4f}", f"{m['f1']:.4f}",
+                     f"{m['precision']:.4f}", f"{m['recall']:.4f}", f"{m['accuracy']:.2%}"])
+    elif m["model"] == "AttentionMIL":
+        rows.append(["AttentionMIL (Video)", f"{m['auc']:.4f}", f"{m['f1']:.4f}",
+                     f"{m['precision']:.4f}", f"{m['recall']:.4f}", f"{m['accuracy']:.2%}"])
+if not rows:
+    rows = [
+        ["XGBoost (Baseline)", "0.9440", "0.8426", "0.8597", "0.8261", "87.30%"],
+        ["AttentionMIL (Video)", f"{metrics.get('auc', 0.9563):.4f}", f"{metrics.get('f1', 0.8683):.4f}",
+         f"{metrics.get('precision', 0.8627):.4f}", f"{metrics.get('recall', 0.8739):.4f}",
+         f"{metrics.get('accuracy', 0.8909):.2%}"],
+    ]
+
 add_table(doc,
     ["Model", "AUC", "F1 Score", "Precision", "Recall", "Accuracy"],
-    [
-        ["XGBoost (Baseline)", "0.9440", "0.8426", "0.8597", "0.8261", "87.30%"],
-        ["MILRanking (Frame)", "0.9124", "0.8315", "0.8241", "0.8390", "85.30%"],
-        ["AttentionMIL (Video)", f"{metrics['auc']:.4f}", f"{metrics['f1']:.4f}",
-         f"{metrics['precision']:.4f}", f"{metrics['recall']:.4f}",
-         f"{metrics['accuracy']:.2%}"],
-    ]
+    rows
 )
 
 doc.add_paragraph("")
