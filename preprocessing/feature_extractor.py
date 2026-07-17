@@ -61,14 +61,19 @@ class TemporalFeatureExtractor:
         return features.cpu().numpy().flatten()
 
     def extract_batch(self, segment_list: List[List[np.ndarray]]) -> np.ndarray:
-        tensors = []
-        for frames in segment_list:
-            t = self._preprocess_single(frames)
-            tensors.append(t)
-        batch = torch.cat(tensors, dim=0)
-        with torch.no_grad():
-            features = self.model(batch)
-        return features.cpu().numpy()
+        all_features = []
+        batch_size = 4
+        for start in range(0, len(segment_list), batch_size):
+            chunk = segment_list[start:start + batch_size]
+            tensors = []
+            for frames in chunk:
+                t = self._preprocess_single(frames)
+                tensors.append(t)
+            batch = torch.cat(tensors, dim=0)
+            with torch.no_grad():
+                features = self.model(batch)
+            all_features.append(features.cpu().numpy().reshape(features.size(0), -1))
+        return np.concatenate(all_features, axis=0)
 
     def _preprocess_single(self, frames: List[np.ndarray]) -> torch.Tensor:
         from torchvision.transforms import functional as F

@@ -1,0 +1,48 @@
+{
+  "models": [
+    {
+      "model": "XGBoost",
+      "auc": 0.944,
+      "accuracy": 0.873,
+      "f1": 0.8426,
+      "precision": 0.8597,
+      "recall": 0.8261,
+      "cm": [
+        [
+          298,
+          31
+        ],
+        [
+          40,
+          190
+        ]
+      ],
+      "best_params": {
+        "learning_rate": 0.1,
+        "max_depth": 4,
+        "n_estimators": 100
+      }
+    },
+    {
+      "model": "AttentionMIL",
+      "auc": 0.9563,
+      "accuracy": 0.8909,
+      "f1": 0.8683,
+      "precision": 0.8627,
+      "recall": 0.8739,
+      "cm": [
+        [
+          297,
+          32
+        ],
+        [
+          29,
+          201
+        ]
+      ]
+    }
+  ],
+  "winner": "AttentionMIL",
+  "winning_reason": "Higher in all metrics: AUC, F1, Precision, Recall, Accuracy",
+  "test_samples": 559
+}

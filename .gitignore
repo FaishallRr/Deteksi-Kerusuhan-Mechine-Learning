@@ -1,85 +1,56 @@
 # Python
 __pycache__/
-*.py[cod]
+*.pyc
+*.pyo
 *.egg-info/
+.eggs/
 dist/
 build/
-*.egg
 
-# Environments
+# Virtual env
 venv/
 .venv/
 env/
-.env
 
 # IDE
 .vscode/
 .idea/
-*.swp
-*.swo
 
-# Models (weights)
-models/*.pt
-models/*.pth
-
-# Evidence & Output
-evidence/*
-!evidence/.gitkeep
-
-# Sample videos (too large, includes extracted frames)
-sample_videos/
-
-# Config (sensitive keys)
-config.yaml
+# Data (keep in cloud, not in git)
+data/raw/
+data/processed/
+data/external/
 
 # OS
 Thumbs.db
 .DS_Store
 
-# Docker
-.docker/
+# Temp
+temp/
+temp_*.txt
+*.log
+stderr_*.txt
+stdout_*.txt
+
+# Streamlit secrets
+.streamlit/secrets.toml
+
+# Old data
+ucf_crime_raw/
+archive/
+.opencode/
 
 # Logs
 *.log
-logs/
+*_err.log
+*_stderr.log
+*_stdout.log
 
-# Large datasets
-ucf_crime_raw/
-features/
+# Notebook checkpoints
+.ipynb_checkpoints/
 
-# Temp test files
-test_*.py
+# ONNX models
+*.onnx
 
-# Kaggle token
-.kaggle/
-
-# Root models (too large for git)
-yolo11n.pt
-yolo11m.pt
-yolo11l.pt
-yolo11s.onnx
-yolo11s.pt
-yolo26n.pt
-
-# Weapon dataset (Roboflow, ~55k images)
-Weapon-Detection-3/
-
-# Sajam training data (crops, google images)
-dataset/
-
-# YOLO training runs
-runs/
-
-# Training artifacts (eval results, history plots)
-models/evaluation_results*.json
-models/training_history*.png
-models/training_history*.npz
-
-# Binary/external tools
-bin/
-
-# Streamlit local config
-.streamlit/
-
-# Curation decisions (generated)
-curation/decisions.csv
+# YOLO models
+yolo*.pt

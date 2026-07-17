@@ -1,0 +1,656 @@
+"""
+Streamlit App - Deteksi Kerusuhan Menggunakan AttentionMIL
+UAS Machine Learning - Universitas Dian Nuswantoro
+"""
+
+import sys, os, json, random, warnings
+warnings.filterwarnings("ignore")
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+import streamlit as st
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+import plotly.express as px
+import plotly.graph_objects as go
+from pathlib import Path
+from collections import Counter
+from PIL import Image
+
+import torch
+from sklearn.metrics import roc_auc_score, roc_curve, confusion_matrix, classification_report
+from sklearn.decomposition import PCA
+from sklearn.manifold import TSNE
+from core.mil_attention import AttentionMILModel
+
+sns.set_style("whitegrid")
+
+# ---- CONFIG ----
+st.set_page_config(
+    page_title="Deteksi Kerusuhan - AttentionMIL",
+    page_icon="",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
+
+MODEL_PATH = "models/mil_final.pt"
+META_PATH = "features/final_dataset/metadata.json"
+FEAT_DIR = Path("features/final_dataset")
+EVAL_DIR = Path("reports/evaluation")
+INTERP_DIR = Path("reports/interpretation")
+EDA_DIR = Path("reports/eda")
+DEVICE = "cpu"
+LABEL_NAMES = {0: "Normal/Damai", 1: "Rusuh"}
+
+
+# ---- CACHE ----
+@st.cache_resource
+def load_model():
+    model = AttentionMILModel(input_dim=1024, hidden_units=256, dropout=0.3)
+    model.load_state_dict(torch.load(MODEL_PATH, map_location=DEVICE, weights_only=True))
+    model.eval()
+    return model
+
+
+@st.cache_data
+def load_metadata():
+    with open(META_PATH) as f:
+        meta = json.load(f)
+    df = pd.DataFrame(meta)
+    df["label_display"] = df["label"].map(LABEL_NAMES)
+    return df, meta
+
+
+@st.cache_data
+def load_eval_metrics():
+    metrics_path = EVAL_DIR / "metrics.json"
+    if metrics_path.exists():
+        with open(metrics_path) as f:
+            return json.load(f)
+    return None
+
+
+@st.cache_data
+def get_test_features():
+    """Cache test set features for fast demo."""
+    _, meta = load_metadata()
+    test_items = [m for m in meta if m["split"] == "test"]
+    features, labels, paths = [], [], []
+    for item in test_items[:200]:  # limit to 200 for speed
+        feat = np.load(item["path"])
+        features.append(feat[:16].mean(axis=0))
+        labels.append(item["label"])
+        paths.append(Path(item["path"]).name)
+    return np.array(features), np.array(labels), paths
+
+
+def predict_features(model, features):
+    """Predict on feature array."""
+    features_t = torch.FloatTensor(features).unsqueeze(0)
+    with torch.no_grad():
+        logits = model(features_t)
+    return torch.sigmoid(logits).item()
+
+
+# ---- SIDEBAR ----
+st.sidebar.title("☰ Menu Navigasi")
+page = st.sidebar.radio(
+    "Pilih Halaman",
+    ["Beranda", "Exploratory Data Analysis", "Demo Model", "Evaluasi & Interpretasi"],
+)
+
+st.sidebar.markdown("---")
+st.sidebar.markdown("**UAS Machine Learning**")
+st.sidebar.markdown("Universitas Dian Nuswantoro")
+st.sidebar.markdown("---")
+st.sidebar.markdown("**Anggota:**")
+st.sidebar.markdown("- Faishal Rasyid Rusianto (A11.2024.15869)")
+
+# ---- PAGES ----
+if page == "Beranda":
+    # ---- HOME ----
+    st.title(" Deteksi Kerusuhan Menggunakan AttentionMIL")
+    st.markdown("### UAS Machine Learning - Program Studi Teknik Informatika")
+    st.markdown("---")
+
+    col1, col2, col3, col4 = st.columns(4)
+    metrics = load_eval_metrics()
+
+    if metrics:
+        col1.metric("Accuracy", f"{metrics['accuracy']:.2%}")
+        col2.metric("AUC", f"{metrics['auc']:.4f}")
+        col3.metric("F1 Score", f"{metrics['f1']:.4f}")
+        col4.metric("MCC", f"{metrics['mcc']:.4f}")
+
+    st.markdown("---")
+
+    col_a, col_b = st.columns(2)
+    with col_a:
+        st.markdown("### 📊 Dataset Overview")
+        df, _ = load_metadata()
+        st.markdown(f"- **Total Video:** {len(df):,}")
+        st.markdown(f"- **Kelas:** 3 (demo_rusuh, demo_damai, normal)")
+        st.markdown(f"- **Split:** Train {df[df['split']=='train'].shape[0]:,} | "
+                    f"Val {df[df['split']=='val'].shape[0]:,} | "
+                    f"Test {df[df['split']=='test'].shape[0]:,}")
+        st.markdown(f"- **Sumber:** YouTube, Kaggle, SCVD, MSV-PG")
+        st.markdown(f"- **Fitur:** S3D 1024-dimensional")
+
+    with col_b:
+        st.markdown("### 🤖 Model Architecture")
+        st.markdown("- **Model:** Attention-based MIL")
+        st.markdown("- **Input:** 16 segments × 1024-d S3D features")
+        st.markdown("- **Attention:** Learnable segment weighting")
+        st.markdown("- **Classifier:** 2-layer MLP (256→128→1)")
+        st.markdown("- **Dropout:** 0.3")
+
+    st.markdown("---")
+    st.markdown("### 🎯 Tujuan")
+    st.markdown(
+        "Mendeteksi kerusuhan dari video CCTV/video amatir menggunakan "
+        "pendekatan Multiple Instance Learning dengan attention mechanism. "
+        "Model mampu mengidentifikasi segmen video yang mengandung aktivitas "
+        "kerusuhan dan memberikan skor anomali secara real-time."
+    )
+
+    st.markdown("### 📈 Model Performance")
+    col_p1, col_p2 = st.columns(2)
+    with col_p1:
+        roc_path = EVAL_DIR / "roc_curve.png"
+        if roc_path.exists():
+            st.image(str(roc_path), caption="ROC Curve")
+    with col_p2:
+        cm_path = EVAL_DIR / "confusion_matrix.png"
+        if cm_path.exists():
+            st.image(str(cm_path), caption="Confusion Matrix")
+
+    st.markdown("### 🔍 Attention Weights")
+    attn_path = INTERP_DIR / "attention_weights.png"
+    if attn_path.exists():
+        st.image(str(attn_path), caption="Attention weights per segment for sample videos")
+
+
+elif page == "Exploratory Data Analysis":
+    # ---- EDA PAGE ----
+    st.title("📊 Exploratory Data Analysis")
+    df, meta = load_metadata()
+
+    tab1, tab2, tab3, tab4, tab5 = st.tabs([
+        "Label Distribution", "Source Analysis", "Split Analysis",
+        "PCA Visualization", "t-SNE Visualization"
+    ])
+
+    with tab1:
+        st.subheader("Distribusi Label")
+        col1, col2 = st.columns(2)
+
+        label_counts = df["label_name"].value_counts()
+        colors = ["#2ecc71", "#e74c3c", "#3498db"]
+
+        fig1, ax = plt.subplots(figsize=(8, 5))
+        bars = ax.bar(label_counts.index, label_counts.values, color=colors, edgecolor="white")
+        ax.set_xlabel("Kelas"); ax.set_ylabel("Jumlah Video")
+        ax.set_title("Distribusi Label", fontweight="bold")
+        for bar in bars:
+            h = bar.get_height()
+            ax.text(bar.get_x() + bar.get_width()/2, h + 20, str(h), ha="center", fontweight="bold")
+        col1.pyplot(fig1)
+
+        fig2, ax = plt.subplots(figsize=(6, 6))
+        ax.pie(label_counts.values, labels=label_counts.index, autopct="%1.1f%%",
+               colors=colors, startangle=90, explode=[0.03]*3)
+        ax.set_title("Proporsi Label", fontweight="bold")
+        col2.pyplot(fig2)
+
+        st.dataframe(label_counts.reset_index().rename(
+            columns={"index": "Label", "label_name": "Jumlah"}))
+
+    with tab2:
+        st.subheader("Distribusi Sumber Data")
+        src_counts = df["source"].value_counts()
+        fig, ax = plt.subplots(figsize=(10, 5))
+        bars = ax.barh(src_counts.index, src_counts.values,
+                       color=sns.color_palette("Set2"), edgecolor="white")
+        ax.set_xlabel("Jumlah Video"); ax.set_ylabel("Sumber Data")
+        ax.set_title("Distribusi Sumber Data", fontweight="bold")
+        for bar in bars:
+            w = bar.get_width()
+            ax.text(w + 10, bar.get_y() + bar.get_height()/2, str(w), ha="left", va="center")
+        st.pyplot(fig)
+
+        # Source per label
+        st.subheader("Sumber Data per Label")
+        ct_src = pd.crosstab(df["source"], df["label_name"])
+        fig, ax = plt.subplots(figsize=(10, 6))
+        ct_src.plot(kind="bar", ax=ax, color=colors, edgecolor="white")
+        ax.set_xlabel("Source"); ax.set_ylabel("Count")
+        ax.set_title("Source per Label", fontweight="bold")
+        ax.legend(title="Label")
+        st.pyplot(fig)
+
+    with tab3:
+        st.subheader("Distribusi Train/Val/Test")
+        split_counts = df["split"].value_counts()
+        split_colors = {"train": "#2ecc71", "val": "#f39c12", "test": "#e74c3c"}
+
+        col1, col2 = st.columns(2)
+        fig1, ax = plt.subplots(figsize=(8, 5))
+        ax.bar(split_counts.index, split_counts.values,
+               color=[split_colors[s] for s in split_counts.index], edgecolor="white")
+        ax.set_xlabel("Split"); ax.set_ylabel("Jumlah Video")
+        ax.set_title("Distribusi Split", fontweight="bold")
+        for i, v in enumerate(split_counts.values):
+            ax.text(i, v + 20, str(v), ha="center", fontweight="bold")
+        col1.pyplot(fig1)
+
+        fig2, ax = plt.subplots(figsize=(6, 6))
+        ax.pie(split_counts.values, labels=split_counts.index,
+               autopct="%1.1f%%",
+               colors=[split_colors[s] for s in split_counts.index],
+               startangle=90, explode=[0.03]*3)
+        ax.set_title("Proporsi Split", fontweight="bold")
+        col2.pyplot(fig2)
+
+        # Label per split
+        st.subheader("Label Distribution per Split")
+        ct = pd.crosstab(df["split"], df["label_name"])
+        fig, ax = plt.subplots(figsize=(8, 5))
+        ct.plot(kind="bar", ax=ax, color=colors, edgecolor="white")
+        ax.set_xlabel("Split"); ax.set_ylabel("Count")
+        ax.set_title("Label per Split", fontweight="bold")
+        ax.legend(title="Label")
+        ax.set_xticklabels(ax.get_xticklabels(), rotation=0)
+        st.pyplot(fig)
+
+    with tab4:
+        st.subheader("PCA - Feature Space Visualization")
+        st.info("Menampilkan 2.000 sample acak dari dataset dengan PCA 2 komponen.")
+
+        n_samples = min(2000, len(df))
+        np.random.seed(42)
+        sample_idx = np.random.choice(len(df), n_samples, replace=False)
+        sample_df = df.iloc[sample_idx]
+
+        features_pca = []
+        labels_pca = []
+        progress = st.progress(0)
+        for i, (_, row) in enumerate(sample_df.iterrows()):
+            feat = np.load(row["path"])
+            features_pca.append(feat.mean(axis=0))
+            labels_pca.append(row["label"])
+            progress.progress((i + 1) / n_samples)
+
+        features_pca = np.array(features_pca)
+        labels_pca = np.array(labels_pca)
+
+        pca = PCA(n_components=2)
+        coords = pca.fit_transform(features_pca)
+
+        fig = px.scatter(
+            x=coords[:, 0], y=coords[:, 1],
+            color=labels_pca, color_continuous_scale="RdYlGn",
+            title=f"PCA (explained variance: {pca.explained_variance_ratio_.sum():.2%})",
+            labels={"x": "PC1", "y": "PC2", "color": "Label"},
+        )
+        st.plotly_chart(fig, use_container_width=True)
+
+    with tab5:
+        st.subheader("t-SNE - Feature Space Visualization")
+        st.info("Menampilkan 1.000 sample dengan t-SNE (perplexity=30).")
+
+        n_tsne = min(1000, len(df))
+        np.random.seed(42)
+        tsne_idx = np.random.choice(len(df), n_tsne, replace=False)
+        tsne_df = df.iloc[tsne_idx]
+
+        features_tsne = []
+        labels_tsne = []
+        progress = st.progress(0)
+        for i, (_, row) in enumerate(tsne_df.iterrows()):
+            feat = np.load(row["path"])
+            features_tsne.append(feat.mean(axis=0))
+            labels_tsne.append(row["label"])
+            progress.progress((i + 1) / n_tsne)
+
+        features_tsne = np.array(features_tsne)
+        labels_tsne = np.array(labels_tsne)
+
+        tsne = TSNE(n_components=2, random_state=42, perplexity=30)
+        coords_tsne = tsne.fit_transform(features_tsne)
+
+        fig = px.scatter(
+            x=coords_tsne[:, 0], y=coords_tsne[:, 1],
+            color=labels_tsne, color_continuous_scale="RdYlGn",
+            title="t-SNE Visualization",
+            labels={"x": "t-SNE 1", "y": "t-SNE 2", "color": "Label"},
+        )
+        st.plotly_chart(fig, use_container_width=True)
+
+
+elif page == "Demo Model":
+    # ---- DEMO PAGE ----
+    st.title("🧪 Demo Model - Deteksi Kerusuhan")
+
+    model = load_model()
+
+    tab_demo, tab_batch = st.tabs(["Single Video Demo", "Batch Test Set Evaluation"])
+
+    with tab_demo:
+        st.markdown("### Pilih Sample Video untuk Diuji")
+        st.markdown(
+            "Model akan memproses fitur S3D dari video dan memberikan skor kerusuhan. "
+            "Skor ≥ 0.5 berarti **RUSUH**, skor < 0.5 berarti **NORMAL/DAMAI**."
+        )
+
+        df, meta = load_metadata()
+        test_items = [m for m in meta if m["split"] == "test"]
+
+        # Group by label
+        normal_items = [m for m in test_items if m["label"] == 0]
+        rusuh_items = [m for m in test_items if m["label"] == 1]
+
+        col1, col2 = st.columns(2)
+        with col1:
+            st.markdown("**Sample Normal/Damai**")
+            sample_normal = st.selectbox(
+                "Pilih video normal:", 
+                [Path(m["path"]).name for m in normal_items[:20]],
+                key="normal_select",
+                label_visibility="collapsed"
+            )
+
+        with col2:
+            st.markdown("**Sample Rusuh**")
+            sample_rusuh = st.selectbox(
+                "Pilih video rusuh:",
+                [Path(m["path"]).name for m in rusuh_items[:20]],
+                key="rusuh_select",
+                label_visibility="collapsed"
+            )
+
+        selected_type = st.radio("Pilih tipe video:", ["Normal/Damai", "Rusuh"], horizontal=True)
+
+        if selected_type == "Normal/Damai":
+            selected_item = next(m for m in normal_items if Path(m["path"]).name == sample_normal)
+        else:
+            selected_item = next(m for m in rusuh_items if Path(m["path"]).name == sample_rusuh)
+
+        if st.button("🔍 Predict", type="primary", use_container_width=True):
+            feat = np.load(selected_item["path"])
+            n_seg = min(16, feat.shape[0])
+            feat_t = torch.FloatTensor(feat[:n_seg]).unsqueeze(0)
+
+            with torch.no_grad():
+                logits = model(feat_t)
+            score = torch.sigmoid(logits).item()
+            pred_label = "🔴 RUSUH" if score >= 0.5 else "🟢 NORMAL/DAMAI"
+            confidence = max(score, 1 - score)
+
+            true_label = "RUSUH" if selected_item["label"] == 1 else "NORMAL/DAMAI"
+            correct = (score >= 0.5) == (selected_item["label"] == 1)
+
+            st.markdown("---")
+
+            # Score gauge
+            fig = go.Figure(go.Indicator(
+                mode="gauge+number+delta",
+                value=score,
+                domain={"x": [0, 1], "y": [0, 1]},
+                title={"text": "Anomaly Score", "font": {"size": 24}},
+                delta={"reference": 0.5, "increasing": {"color": "red"},
+                       "decreasing": {"color": "green"}},
+                gauge={
+                    "axis": {"range": [0, 1], "tickwidth": 1},
+                    "bar": {"color": "red" if score >= 0.5 else "green"},
+                    "steps": [
+                        {"range": [0, 0.5], "color": "lightgreen"},
+                        {"range": [0.5, 1], "color": "lightcoral"},
+                    ],
+                    "threshold": {
+                        "line": {"color": "black", "width": 4},
+                        "thickness": 0.75, "value": 0.5
+                    }
+                }
+            ))
+            fig.update_layout(height=350)
+            st.plotly_chart(fig, use_container_width=True)
+
+            col_r1, col_r2, col_r3, col_r4 = st.columns(4)
+            col_r1.metric("Prediction", pred_label)
+            col_r2.metric("Confidence", f"{confidence:.2%}")
+            col_r3.metric("True Label", true_label)
+            col_r4.metric("Status", "✅ Correct" if correct else "❌ Wrong",
+                          delta_color="off")
+
+            # Segment-level attention
+            feat_all = np.load(selected_item["path"])
+            n_seg_all = min(16, feat_all.shape[0])
+            seg_scores = []
+            for i in range(n_seg_all):
+                f_t = torch.FloatTensor(feat_all[i:i+1]).unsqueeze(0)
+                with torch.no_grad():
+                    s = torch.sigmoid(model(f_t)).item()
+                seg_scores.append(s)
+
+            st.subheader("Segment-Level Scores")
+            fig, ax = plt.subplots(figsize=(10, 3))
+            colors_seg = ["red" if s >= 0.5 else "green" for s in seg_scores]
+            ax.bar(range(n_seg_all), seg_scores, color=colors_seg, alpha=0.8)
+            ax.axhline(0.5, color="gray", ls="--", label="threshold")
+            ax.set_xlabel("Segment Index"); ax.set_ylabel("Score")
+            ax.set_title("Per-Segment Anomaly Scores")
+            ax.legend(); ax.set_ylim(0, 1)
+            st.pyplot(fig)
+
+    with tab_batch:
+        st.markdown("### Test Set Batch Evaluation")
+        st.markdown("Mengevaluasi model pada seluruh test set (559 video).")
+
+        if st.button("▶️ Run Batch Evaluation", type="primary"):
+            progress = st.progress(0)
+            status = st.empty()
+
+            test_items_batch = [m for m in meta if m["split"] == "test"]
+            y_true, y_score_batch = [], []
+
+            for i, item in enumerate(test_items_batch):
+                feat = np.load(item["path"])
+                n_seg = min(16, feat.shape[0])
+                feat_t = torch.FloatTensor(feat[:n_seg]).unsqueeze(0)
+                with torch.no_grad():
+                    s = torch.sigmoid(model(feat_t)).item()
+                y_true.append(item["label"])
+                y_score_batch.append(s)
+                progress.progress((i + 1) / len(test_items_batch))
+                status.text(f"Processing {i+1}/{len(test_items_batch)}")
+
+            y_true = np.array(y_true)
+            y_score_batch = np.array(y_score_batch)
+            y_pred = (y_score_batch >= 0.5).astype(int)
+
+            auc = roc_auc_score(y_true, y_score_batch)
+            cm = confusion_matrix(y_true, y_pred)
+            acc = np.mean(y_true == y_pred)
+
+            col_m1, col_m2, col_m3, col_m4 = st.columns(4)
+            col_m1.metric("Accuracy", f"{acc:.2%}")
+            col_m2.metric("AUC", f"{auc:.4f}")
+            col_m3.metric("Normal Correct", f"{cm[0,0]}/{cm[0,0]+cm[0,1]}")
+            col_m4.metric("Rusuh Correct", f"{cm[1,1]}/{cm[1,0]+cm[1,1]}")
+
+            fig, axes = plt.subplots(1, 2, figsize=(12, 4.5))
+            fpr, tpr, _ = roc_curve(y_true, y_score_batch)
+            axes[0].plot(fpr, tpr, "b-", lw=2.5, label=f"AUC = {auc:.4f}")
+            axes[0].plot([0, 1], [0, 1], "k--", alpha=0.5)
+            axes[0].fill_between(fpr, tpr, alpha=0.1, color="blue")
+            axes[0].set_xlabel("FPR"); axes[0].set_ylabel("TPR")
+            axes[0].set_title("ROC Curve"); axes[0].legend()
+
+            sns.heatmap(cm, annot=True, fmt="d", cmap="Blues",
+                        xticklabels=["Normal", "Rusuh"],
+                        yticklabels=["Normal", "Rusuh"], ax=axes[1])
+            axes[1].set_xlabel("Predicted"); axes[1].set_ylabel("Actual")
+            axes[1].set_title("Confusion Matrix")
+
+            plt.tight_layout()
+            st.pyplot(fig)
+
+            st.markdown("**Classification Report:**")
+            report = classification_report(y_true, y_pred,
+                                           target_names=["Normal/Damai", "Rusuh"],
+                                           output_dict=True, zero_division=0)
+            st.dataframe(pd.DataFrame(report).transpose().round(4))
+
+
+elif page == "Evaluasi & Interpretasi":
+    # ---- EVALUATION PAGE ----
+    st.title("📈 Evaluasi & Interpretasi Model")
+
+    tab_eval, tab_interp, tab_about = st.tabs([
+        "Model Evaluation", "Model Interpretation", "About Model"
+    ])
+
+    with tab_eval:
+        st.subheader("Performance Metrics")
+
+        metrics = load_eval_metrics()
+        if metrics:
+            col1, col2, col3 = st.columns(3)
+            col1.metric("Accuracy", f"{metrics['accuracy']:.2%}")
+            col1.metric("AUC", f"{metrics['auc']:.4f}")
+            col2.metric("Precision", f"{metrics['precision']:.4f}")
+            col2.metric("Recall", f"{metrics['recall']:.4f}")
+            col3.metric("F1 Score", f"{metrics['f1']:.4f}")
+            col3.metric("MCC", f"{metrics['mcc']:.4f}")
+
+            st.markdown(f"- **Test Set:** {metrics['test_samples']} videos")
+            st.markdown(f"- **False Positives:** {metrics['false_positives']} (Normal → Rusuh)")
+            st.markdown(f"- **False Negatives:** {metrics['false_negatives']} (Rusuh → Normal)")
+
+            st.markdown("---")
+
+            col_img1, col_img2 = st.columns(2)
+            with col_img1:
+                roc_path = EVAL_DIR / "roc_curve.png"
+                if roc_path.exists():
+                    st.image(str(roc_path), caption="ROC Curve (AUC = {:.4f})".format(
+                        metrics['auc']))
+            with col_img2:
+                cm_path = EVAL_DIR / "confusion_matrix.png"
+                if cm_path.exists():
+                    st.image(str(cm_path), caption="Confusion Matrix")
+
+            col_img3, col_img4 = st.columns(2)
+            with col_img3:
+                pr_path = EVAL_DIR / "pr_curve.png"
+                if pr_path.exists():
+                    st.image(str(pr_path), caption="Precision-Recall Curve")
+            with col_img4:
+                sd_path = EVAL_DIR / "score_distribution.png"
+                if sd_path.exists():
+                    st.image(str(sd_path), caption="Score Distribution by Class")
+
+            st.subheader("Classification Report")
+            df_report = pd.DataFrame({
+                "Metric": ["Accuracy", "AUC", "F1", "Precision", "Recall", "MCC"],
+                "Value": [
+                    f"{metrics['accuracy']:.2%}",
+                    f"{metrics['auc']:.4f}",
+                    f"{metrics['f1']:.4f}",
+                    f"{metrics['precision']:.4f}",
+                    f"{metrics['recall']:.4f}",
+                    f"{metrics['mcc']:.4f}",
+                ],
+            })
+            st.dataframe(df_report, use_container_width=True)
+
+    with tab_interp:
+        st.subheader("Model Interpretation")
+
+        st.markdown("""
+        **Attention-based MIL** memberikan interpretasi dengan cara:
+        1. Setiap segmen video mendapat attention weight
+        2. Segmen dengan weight tinggi → kontribusi besar ke prediksi akhir
+        3. Feature ablation mengukur dampak tiap segmen terhadap skor
+        """)
+
+        col_i1, col_i2 = st.columns(2)
+        with col_i1:
+            attn_path = INTERP_DIR / "attention_weights.png"
+            if attn_path.exists():
+                st.image(str(attn_path), caption="Attention Weights per Segment",
+                         use_container_width=True)
+        with col_i2:
+            abl_path = INTERP_DIR / "feature_ablation.png"
+            if abl_path.exists():
+                st.image(str(abl_path), caption="Feature Ablation Impact",
+                         use_container_width=True)
+
+        col_i3, col_i4 = st.columns(2)
+        with col_i3:
+            evo_path = INTERP_DIR / "per_video_evolution.png"
+            if evo_path.exists():
+                st.image(str(evo_path), caption="Score Evolution per Video",
+                         use_container_width=True)
+        with col_i4:
+            conv_path = INTERP_DIR / "score_convergence.png"
+            if conv_path.exists():
+                st.image(str(conv_path), caption="Score Convergence by #Segments",
+                         use_container_width=True)
+
+        st.subheader("Key Insights")
+        st.markdown("""
+        - **Attention weights** menunjukkan model fokus ke segmen dengan gerakan abnormal
+        - **Ablation analysis** mengkonfirmasi setiap segmen berkontribusi; segmen akhir lebih penting
+        - **Score convergence** stabil setelah 8-10 segmen
+        - **Score evolution** menunjukkan model butuh ~4-6 segmen untuk keputusan akurat
+        """)
+
+    with tab_about:
+        st.subheader("Tentang Model")
+
+        st.markdown("""
+        ### AttentionMIL Model Architecture
+
+        ```
+        Input: 16 segments x 1024-d S3D features
+               │
+               ▼
+        Attention Network
+        ┌─────────────────────────┐
+        │ Linear(1024 → 256)      │
+        │ Tanh                     │
+        │ Linear(256 → 1)          │
+        └─────────────────────────┘
+               │
+               ▼
+        Softmax → Attention Weights
+               │
+               ▼
+        Weighted Bag Representation
+               │
+               ▼
+        Classifier MLP
+        ┌─────────────────────────┐
+        │ Linear(1024 → 256)      │
+        │ ReLU + Dropout(0.3)     │
+        │ Linear(256 → 128)       │
+        │ ReLU + Dropout(0.3)     │
+        │ Linear(128 → 1)         │
+        └─────────────────────────┘
+               │
+               ▼
+        Sigmoid → Anomaly Score (0-1)
+        ```
+
+        **Training Details:**
+        - Optimizer: Adam
+        - Loss: Binary Cross-Entropy
+        - Epochs: 50 (with early stopping)
+        - Batch size: 32
+        - Learning rate: 0.001
+        - Data split: 80/10/10
+
+        **Feature Extractor:** S3D (Separable 3D CNN) - pretrained on Kinetics-400
+        """)

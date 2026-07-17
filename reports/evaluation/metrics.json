@@ -1,0 +1,35 @@
+{
+  "model": "AttentionMIL",
+  "input_dim": 1024,
+  "hidden_units": 256,
+  "test_samples": 559,
+  "accuracy": 0.8908765652951699,
+  "auc": 0.956323509977534,
+  "f1": 0.8682505399568035,
+  "precision": 0.8626609442060086,
+  "recall": 0.8739130434782608,
+  "mcc": 0.7751748491005497,
+  "false_positives": 32,
+  "false_negatives": 29,
+  "cm": [
+    [
+      297,
+      32
+    ],
+    [
+      29,
+      201
+    ]
+  ],
+  "normal_test_count": 329,
+  "rusuh_test_count": 230,
+  "splits": {
+    "train": 4440,
+    "test": 559,
+    "val": 553
+  },
+  "label_distribution": {
+    "0": 3266,
+    "1": 2286
+  }
+}
