@@ -312,7 +312,7 @@ elif page == "Exploratory Data Analysis":
             title=f"PCA (explained variance: {pca.explained_variance_ratio_.sum():.2%})",
             labels={"x": "PC1", "y": "PC2", "color": "Label"},
         )
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width='stretch')
 
     with tab5:
         st.subheader("t-SNE - Feature Space Visualization")
@@ -350,7 +350,7 @@ elif page == "Exploratory Data Analysis":
             title="t-SNE Visualization",
             labels={"x": "t-SNE 1", "y": "t-SNE 2", "color": "Label"},
         )
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width='stretch')
 
 
 elif page == "Demo Model":
@@ -413,8 +413,12 @@ elif page == "Demo Model":
                                f"Segmen: {selected_demo['segments']}")
 
                 with col_pred:
-                    if st.button("🔍 Predict Video Ini", type="primary", use_container_width=True):
-                        feat = np.load(selected_demo["path"])
+                    if st.button("🔍 Predict Video Ini", type="primary", width='stretch'):
+                        feat_path = Path(selected_demo["path"])
+                        if not feat_path.exists():
+                            st.error(f"File fitur tidak ditemukan: {feat_path.name}. Gunakan video lain.")
+                            st.stop()
+                        feat = np.load(str(feat_path))
                         n_seg = min(16, feat.shape[0])
                         feat_t = torch.FloatTensor(feat[:n_seg]).unsqueeze(0)
 
@@ -447,7 +451,7 @@ elif page == "Demo Model":
                             }
                         ))
                         fig.update_layout(height=250)
-                        st.plotly_chart(fig, use_container_width=True)
+                        st.plotly_chart(fig, width='stretch')
 
                         col1, col2 = st.columns(2)
                         col1.metric("Prediction", pred_label)
@@ -507,7 +511,7 @@ elif page == "Demo Model":
             key="feat_select",
         )
 
-        if st.button("🔍 Predict", type="primary", use_container_width=True):
+        if st.button("🔍 Predict", type="primary", width='stretch'):
             try:
                 feat = np.load(selected_item["path"])
             except (FileNotFoundError, OSError):
@@ -543,7 +547,7 @@ elif page == "Demo Model":
                     }
                 ))
                 fig.update_layout(height=250)
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, width='stretch')
 
             with col_r:
                 st.markdown("### Hasil")
@@ -696,7 +700,7 @@ elif page == "Evaluasi & Interpretasi":
                     f"{metrics['mcc']:.4f}",
                 ],
             })
-            st.dataframe(df_report, use_container_width=True)
+            st.dataframe(df_report, width='stretch')
 
     with tab_interp:
         st.subheader("Model Interpretation")
@@ -713,24 +717,24 @@ elif page == "Evaluasi & Interpretasi":
             attn_path = INTERP_DIR / "attention_weights.png"
             if attn_path.exists():
                 st.image(str(attn_path), caption="Attention Weights per Segment",
-                         use_container_width=True)
+                         width='stretch')
         with col_i2:
             abl_path = INTERP_DIR / "feature_ablation.png"
             if abl_path.exists():
                 st.image(str(abl_path), caption="Feature Ablation Impact",
-                         use_container_width=True)
+                         width='stretch')
 
         col_i3, col_i4 = st.columns(2)
         with col_i3:
             evo_path = INTERP_DIR / "per_video_evolution.png"
             if evo_path.exists():
                 st.image(str(evo_path), caption="Score Evolution per Video",
-                         use_container_width=True)
+                         width='stretch')
         with col_i4:
             conv_path = INTERP_DIR / "score_convergence.png"
             if conv_path.exists():
                 st.image(str(conv_path), caption="Score Convergence by #Segments",
-                         use_container_width=True)
+                         width='stretch')
 
         st.subheader("Key Insights")
         st.markdown("""

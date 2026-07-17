@@ -1,6 +1,6 @@
 [
   {
-    "path": "features\\demo_videos\\fight_sample_1.npy",
+    "path": "features/demo_videos/fight_sample_1.npy",
     "label": 1,
     "label_name": "rusuh",
     "video_file": "fight_sample_1.mp4",
@@ -9,7 +9,7 @@
     "extraction_time": 33.3
   },
   {
-    "path": "features\\demo_videos\\fight_sample_2.npy",
+    "path": "features/demo_videos/fight_sample_2.npy",
     "label": 1,
     "label_name": "rusuh",
     "video_file": "fight_sample_2.mp4",
@@ -18,7 +18,7 @@
     "extraction_time": 8.0
   },
   {
-    "path": "features\\demo_videos\\u3EyoqRiEyI.npy",
+    "path": "features/demo_videos/u3EyoqRiEyI.npy",
     "label": 1,
     "label_name": "rusuh",
     "video_file": "u3EyoqRiEyI.mp4",
@@ -27,7 +27,7 @@
     "extraction_time": 18.5
   },
   {
-    "path": "features\\demo_videos\\yt_tawuran_hQ98fJ-KITQ.npy",
+    "path": "features/demo_videos/yt_tawuran_hQ98fJ-KITQ.npy",
     "label": 1,
     "label_name": "rusuh",
     "video_file": "yt_tawuran_hQ98fJ-KITQ.mp4",
