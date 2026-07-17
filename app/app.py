@@ -418,25 +418,36 @@ elif page == "Demo Model":
 
                     if show_bbox and video_path.exists():
                         import cv2
+                        import numpy as np
                         cap = cv2.VideoCapture(str(video_path))
-                        hog = cv2.HOGDescriptor()
-                        hog.setSVMDetector(cv2.HOGDescriptor_getDefaultPeopleDetector())
                         frames_bb = []
                         total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
                         total = min(total, 150)
                         bprog = st.progress(0)
-                        for fi in range(total):
-                            ret, fr = cap.read()
-                            if not ret:
-                                break
-                            boxes, _ = hog.detectMultiScale(
-                                cv2.cvtColor(fr, cv2.COLOR_BGR2RGB),
-                                winStride=(4, 4), padding=(8, 8), scale=1.05
-                            )
-                            for (x, y, w, h) in boxes:
-                                cv2.rectangle(fr, (x, y), (x + w, y + h), (0, 255, 0), 2)
-                            frames_bb.append(fr)
-                            bprog.progress((fi + 1) / total)
+                        ret, prev = cap.read()
+                        if ret:
+                            prev_gray = cv2.GaussianBlur(
+                                cv2.cvtColor(prev, cv2.COLOR_BGR2GRAY), (5, 5), 0)
+                            for fi in range(total - 1):
+                                ret, fr = cap.read()
+                                if not ret:
+                                    break
+                                gray = cv2.GaussianBlur(
+                                    cv2.cvtColor(fr, cv2.COLOR_BGR2GRAY), (5, 5), 0)
+                                diff = cv2.absdiff(prev_gray, gray)
+                                _, th = cv2.threshold(diff, 30, 255, cv2.THRESH_BINARY)
+                                th = cv2.morphologyEx(th, cv2.MORPH_OPEN,
+                                    cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5)))
+                                cnts, _ = cv2.findContours(th, cv2.RETR_EXTERNAL,
+                                                           cv2.CHAIN_APPROX_SIMPLE)
+                                for c in cnts:
+                                    if cv2.contourArea(c) < 200:
+                                        continue
+                                    x, y, w, h = cv2.boundingRect(c)
+                                    cv2.rectangle(fr, (x, y), (x + w, y + h), (0, 255, 0), 2)
+                                frames_bb.append(fr)
+                                prev_gray = gray
+                                bprog.progress((fi + 1) / total)
                         cap.release()
 
                         if frames_bb:
@@ -690,10 +701,9 @@ elif page == "Demo Model":
     with tab_upload:
         st.markdown("### Upload Video + Deteksi Bounding Box")
         st.markdown(
-            "Upload video Anda sendiri. Sistem akan mendeteksi orang menggunakan "
-            "*Histogram of Oriented Gradients (HOG)* dan menampilkan bounding box "
-            "pada setiap frame. Aktivitas diklasifikasikan berdasarkan kepadatan "
-            "dan pergerakan yang terdeteksi."
+            "Upload video Anda sendiri. Sistem akan mendeteksi area bergerak "
+            "menggunakan *frame differencing* dan menampilkan bounding box "
+            "pada setiap frame."
         )
 
         uploaded_file = st.file_uploader(
@@ -717,28 +727,41 @@ elif page == "Demo Model":
 
             st.markdown(f"**File:** {uploaded_file.name} | **Durasi:** {duration:.1f}s | **Frame:** {total_frames}")
 
-            hog = cv2.HOGDescriptor()
-            hog.setSVMDetector(cv2.HOGDescriptor_getDefaultPeopleDetector())
-
             frame_buffer = []
-            max_frames = min(total_frames, fps * 10)
+            max_frames = min(total_frames, fps * 8)
 
             progress = st.progress(0)
             status = st.empty()
 
-            person_counts = []
+            ret, prev = cap.read()
+            if not ret:
+                st.error("Tidak bisa membaca video.")
+                os.unlink(tfile.name)
+                st.stop()
+            prev_gray = cv2.cvtColor(prev, cv2.COLOR_BGR2GRAY)
+            prev_gray = cv2.GaussianBlur(prev_gray, (5, 5), 0)
+
+            motion_areas = []
             for idx in range(max_frames):
                 ret, frame = cap.read()
                 if not ret:
                     break
-                rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                boxes, _ = hog.detectMultiScale(rgb, winStride=(4, 4), padding=(8, 8), scale=1.05)
-                person_counts.append(len(boxes))
-                for (x, y, w, h) in boxes:
+                gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+                gray = cv2.GaussianBlur(gray, (5, 5), 0)
+                diff = cv2.absdiff(prev_gray, gray)
+                _, thresh = cv2.threshold(diff, 30, 255, cv2.THRESH_BINARY)
+                kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
+                thresh = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel)
+                cnts, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+                valid = [c for c in cnts if cv2.contourArea(c) >= 200]
+                motion_areas.append(len(valid))
+                for c in valid:
+                    x, y, w, h = cv2.boundingRect(c)
                     cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
                 frame_buffer.append(frame)
+                prev_gray = gray
                 progress.progress((idx + 1) / max_frames)
-                status.text(f"Frame {idx + 1}/{max_frames} | Orang terdeteksi: {len(boxes)}")
+                status.text(f"Frame {idx + 1}/{max_frames} | Objek bergerak: {len(valid)}")
 
             cap.release()
             os.unlink(tfile.name)
@@ -747,15 +770,15 @@ elif page == "Demo Model":
                 st.error("Tidak bisa membaca video. Coba file lain.")
                 st.stop()
 
-            avg_people = sum(person_counts) / len(person_counts) if person_counts else 0
-            max_people = max(person_counts) if person_counts else 0
-            chaos_score = min(avg_people / 5.0, 1.0)
+            avg_motion = sum(motion_areas) / len(motion_areas) if motion_areas else 0
+            max_motion = max(motion_areas) if motion_areas else 0
+            chaos_score = min(avg_motion / 3.0, 1.0)
             pred_upload = "🔴 RUSUH" if chaos_score >= 0.5 else "🟢 NORMAL/DAMAI"
 
             st.markdown("---")
             col_um1, col_um2, col_um3, col_um4 = st.columns(4)
-            col_um1.metric("Rata-rata Orang/Frame", f"{avg_people:.1f}")
-            col_um2.metric("Maks Orang/Frame", str(max_people))
+            col_um1.metric("Rata-rata Objek/Frame", f"{avg_motion:.1f}")
+            col_um2.metric("Maks Objek/Frame", str(max_motion))
             col_um3.metric("Chaos Score", f"{chaos_score:.2%}")
             col_um4.metric("Prediksi", pred_upload)
 
@@ -780,16 +803,16 @@ elif page == "Demo Model":
 
         st.markdown("---")
         st.caption(
-            "Deteksi menggunakan HOG People Detector (OpenCV). "
-            "Klasifikasi berdasarkan kepadatan orang per frame."
+            "Bounding box berdasarkan deteksi gerakan (background subtraction). "
+            "Klasifikasi berdasarkan intensitas pergerakan per frame."
         )
 
     # ===== WEBCAM TAB =====
     with tab_webcam:
-        st.markdown("### Webcam - Deteksi Real-time")
+        st.markdown("### Webcam - Deteksi Wajah")
         st.markdown(
-            "Ambil foto dari webcam. Sistem akan mendeteksi orang dalam gambar "
-            "dan menampilkan bounding box beserta analisis keramaian."
+            "Ambil foto dari webcam. Sistem akan mendeteksi wajah menggunakan "
+            "OpenCV FaceDetectorYN dan menampilkan bounding box."
         )
 
         cam_img = st.camera_input("Ambil foto dari webcam", key="webcam")
@@ -802,15 +825,15 @@ elif page == "Demo Model":
             arr = np.frombuffer(bytes_data, np.uint8)
             img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
 
-            hog = cv2.HOGDescriptor()
-            hog.setSVMDetector(cv2.HOGDescriptor_getDefaultPeopleDetector())
+            gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+            face_cascade = cv2.CascadeClassifier(
+                cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
+            faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1,
+                                                   minNeighbors=5, minSize=(60, 60))
 
-            rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-            boxes, _ = hog.detectMultiScale(rgb, winStride=(4, 4), padding=(8, 8), scale=1.05)
-
-            for (x, y, w, h) in boxes:
+            for (x, y, w, h) in faces:
                 cv2.rectangle(img, (x, y), (x + w, y + h), (0, 255, 0), 2)
-                cv2.putText(img, "Person", (x, y - 5),
+                cv2.putText(img, "Wajah", (x, y - 5),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
 
             img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
@@ -819,20 +842,20 @@ elif page == "Demo Model":
             with col_wc1:
                 st.image(cam_img, caption="Foto Asli", width='stretch')
             with col_wc2:
-                st.image(img_rgb, caption=f"Deteksi ({len(boxes)} orang)", width='stretch')
+                st.image(img_rgb, caption=f"Deteksi ({len(faces)} wajah)", width='stretch')
 
-            people = len(boxes)
-            if people == 0:
-                wc_status = "🟢 Aman - Tidak ada orang terdeteksi"
-            elif people <= 3:
-                wc_status = "🟡 Waspada - Keramaian rendah"
-            elif people <= 6:
-                wc_status = "🟠 Siaga - Keramaian sedang"
+            n_faces = len(faces)
+            if n_faces == 0:
+                wc_status = "🟢 Tidak ada wajah terdeteksi"
+            elif n_faces <= 2:
+                wc_status = "🟡 Waspada - Beberapa orang"
+            elif n_faces <= 5:
+                wc_status = "🟠 Siaga - Keramaian"
             else:
-                wc_status = "🔴 RUSUH - Keramaian tinggi"
+                wc_status = "🔴 RUSUH - Kerumunan besar"
 
             st.markdown(f"**Hasil:** {wc_status}")
-            st.metric("Jumlah Orang Terdeteksi", people)
+            st.metric("Jumlah Wajah Terdeteksi", n_faces)
         else:
             st.info("Klik 'Ambil foto' untuk mengaktifkan webcam.")
 
