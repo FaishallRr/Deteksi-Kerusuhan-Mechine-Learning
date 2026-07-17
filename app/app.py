@@ -883,7 +883,7 @@ elif page == "Demo Model":
         )
 
         cont_mode = st.checkbox("Mode CCTV Otomatis (refresh tiap 3 detik)", key="cctv_auto")
-        cam_img = st.camera_input("Ambil foto dari webcam", key="webcam_cctv", disabled=cont_mode)
+        cam_img = st.camera_input("Ambil foto dari webcam", key="webcam_cctv")
 
         if cam_img is not None:
             yolo = load_yolo()
