@@ -60,13 +60,22 @@ def load_metadata():
     BASE = Path.cwd().resolve()
     for m in meta:
         raw = m["path"]
-        p = Path(raw)
-        if p.is_absolute():
+        raw_norm = raw.replace("\\", "/")
+        if ":" in raw_norm.split("/")[0]:
+            parts = raw_norm.split("/")
             try:
-                rel = p.relative_to(Path("D:\\MyProject\\Deteksi Kerusuhan - Mechine Learning").resolve())
-                m["path"] = str(rel)
-            except ValueError:
-                m["path"] = p.name
+                idx = next(i for i, p in enumerate(parts) if p == "features")
+                m["path"] = "/".join(parts[idx:])
+            except StopIteration:
+                m["path"] = parts[-1]
+        else:
+            p = Path(raw_norm)
+            if p.is_absolute():
+                try:
+                    rel = p.relative_to(BASE)
+                    m["path"] = str(rel)
+                except ValueError:
+                    m["path"] = p.name
     df = pd.DataFrame(meta)
     df["label_display"] = df["label"].map(LABEL_NAMES)
     return df, meta
@@ -561,7 +570,7 @@ elif page == "Demo Model":
                 st.markdown(f"- Segmen: {n_seg}")
 
             # Segment scores
-            feat_all = np.load(selected_item["path"])
+                        feat_all = feat
             n_all = min(16, feat_all.shape[0])
             seg_scores = []
             for i in range(n_all):
