@@ -726,7 +726,12 @@ elif page == "Demo Model":
             y_true, y_score_batch = [], []
 
             for i, item in enumerate(test_items_batch):
-                feat = np.load(item["path"])
+                try:
+                    feat = np.load(item["path"])
+                except (FileNotFoundError, OSError):
+                    status.text(f"Skipping {i+1}/{len(test_items_batch)} (file not found)")
+                    progress.progress((i + 1) / len(test_items_batch))
+                    continue
                 n_seg = min(16, feat.shape[0])
                 feat_t = torch.FloatTensor(feat[:n_seg]).unsqueeze(0)
                 with torch.no_grad():
