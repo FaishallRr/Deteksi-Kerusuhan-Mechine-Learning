@@ -57,6 +57,16 @@ def load_model():
 def load_metadata():
     with open(META_PATH) as f:
         meta = json.load(f)
+    BASE = Path.cwd().resolve()
+    for m in meta:
+        raw = m["path"]
+        p = Path(raw)
+        if p.is_absolute():
+            try:
+                rel = p.relative_to(Path("D:\\MyProject\\Deteksi Kerusuhan - Mechine Learning").resolve())
+                m["path"] = str(rel)
+            except ValueError:
+                m["path"] = p.name
     df = pd.DataFrame(meta)
     df["label_display"] = df["label"].map(LABEL_NAMES)
     return df, meta
@@ -78,10 +88,13 @@ def get_test_features():
     test_items = [m for m in meta if m["split"] == "test"]
     features, labels, paths = [], [], []
     for item in test_items[:200]:  # limit to 200 for speed
-        feat = np.load(item["path"])
-        features.append(feat[:16].mean(axis=0))
-        labels.append(item["label"])
-        paths.append(Path(item["path"]).name)
+        try:
+            feat = np.load(item["path"])
+            features.append(feat[:16].mean(axis=0))
+            labels.append(item["label"])
+            paths.append(Path(item["path"]).name)
+        except (FileNotFoundError, OSError):
+            continue
     return np.array(features), np.array(labels), paths
 
 
@@ -276,11 +289,17 @@ elif page == "Exploratory Data Analysis":
         labels_pca = []
         progress = st.progress(0)
         for i, (_, row) in enumerate(sample_df.iterrows()):
-            feat = np.load(row["path"])
-            features_pca.append(feat.mean(axis=0))
-            labels_pca.append(row["label"])
+            try:
+                feat = np.load(row["path"])
+                features_pca.append(feat.mean(axis=0))
+                labels_pca.append(row["label"])
+            except (FileNotFoundError, OSError):
+                pass
             progress.progress((i + 1) / n_samples)
 
+        if not features_pca:
+            st.warning("Tidak ada file fitur yang tersedia untuk PCA.")
+            st.stop()
         features_pca = np.array(features_pca)
         labels_pca = np.array(labels_pca)
 
@@ -308,11 +327,17 @@ elif page == "Exploratory Data Analysis":
         labels_tsne = []
         progress = st.progress(0)
         for i, (_, row) in enumerate(tsne_df.iterrows()):
-            feat = np.load(row["path"])
-            features_tsne.append(feat.mean(axis=0))
-            labels_tsne.append(row["label"])
+            try:
+                feat = np.load(row["path"])
+                features_tsne.append(feat.mean(axis=0))
+                labels_tsne.append(row["label"])
+            except (FileNotFoundError, OSError):
+                pass
             progress.progress((i + 1) / n_tsne)
 
+        if not features_tsne:
+            st.warning("Tidak ada file fitur yang tersedia untuk t-SNE.")
+            st.stop()
         features_tsne = np.array(features_tsne)
         labels_tsne = np.array(labels_tsne)
 
@@ -483,7 +508,11 @@ elif page == "Demo Model":
         )
 
         if st.button("🔍 Predict", type="primary", use_container_width=True):
-            feat = np.load(selected_item["path"])
+            try:
+                feat = np.load(selected_item["path"])
+            except (FileNotFoundError, OSError):
+                st.error(f"File fitur tidak ditemukan: {selected_item['path']}")
+                st.stop()
             n_seg = min(16, feat.shape[0])
             feat_t = torch.FloatTensor(feat[:n_seg]).unsqueeze(0)
 

@@ -68,7 +68,7 @@ features/cctv_indonesia/
 features/cctv_indonesia_scraped/
 features/demo_indonesia/
 features/demo_videos/*.npy
-features/final_dataset/
+features/final_dataset/*.npy
 features/fp_test/
 features/indonesia/
 features/indonesia_v3/
