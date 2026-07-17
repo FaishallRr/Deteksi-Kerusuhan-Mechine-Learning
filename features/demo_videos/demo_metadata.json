@@ -1,0 +1,101 @@
+[
+  {
+    "path": "features\\demo_videos\\anomaly_00.npy",
+    "label": 1,
+    "label_name": "rusuh",
+    "video_file": "anomaly_00.mp4",
+    "display_name": "Kerusuhan - anomaly_00",
+    "segments": 1,
+    "extraction_time": 0.4
+  },
+  {
+    "path": "features\\demo_videos\\anomaly_01.npy",
+    "label": 1,
+    "label_name": "rusuh",
+    "video_file": "anomaly_01.mp4",
+    "display_name": "Kerusuhan - anomaly_01",
+    "segments": 1,
+    "extraction_time": 0.4
+  },
+  {
+    "path": "features\\demo_videos\\anomaly_02.npy",
+    "label": 1,
+    "label_name": "rusuh",
+    "video_file": "anomaly_02.mp4",
+    "display_name": "Kerusuhan - anomaly_02",
+    "segments": 1,
+    "extraction_time": 0.4
+  },
+  {
+    "path": "features\\demo_videos\\anomaly_03.npy",
+    "label": 1,
+    "label_name": "rusuh",
+    "video_file": "anomaly_03.mp4",
+    "display_name": "Kerusuhan - anomaly_03",
+    "segments": 1,
+    "extraction_time": 0.4
+  },
+  {
+    "path": "features\\demo_videos\\anomaly_04.npy",
+    "label": 1,
+    "label_name": "rusuh",
+    "video_file": "anomaly_04.mp4",
+    "display_name": "Kerusuhan - anomaly_04",
+    "segments": 1,
+    "extraction_time": 0.4
+  },
+  {
+    "path": "features\\demo_videos\\1023222362848472_detected.npy",
+    "label": 0,
+    "label_name": "normal",
+    "video_file": "1023222362848472_detected.mp4",
+    "display_name": "Non-rusuh - 102322236284...",
+    "segments": 16,
+    "extraction_time": 6.3
+  },
+  {
+    "path": "features\\demo_videos\\1359350648786152_detected.npy",
+    "label": 0,
+    "label_name": "normal",
+    "video_file": "1359350648786152_detected.mp4",
+    "display_name": "Non-rusuh - 135935064878...",
+    "segments": 16,
+    "extraction_time": 6.0
+  },
+  {
+    "path": "features\\demo_videos\\1405165900827722_detected.npy",
+    "label": 0,
+    "label_name": "normal",
+    "video_file": "1405165900827722_detected.mp4",
+    "display_name": "Non-rusuh - 140516590082...",
+    "segments": 16,
+    "extraction_time": 9.9
+  },
+  {
+    "path": "features\\demo_videos\\1491192275217596_detected.npy",
+    "label": 0,
+    "label_name": "normal",
+    "video_file": "1491192275217596_detected.mp4",
+    "display_name": "Non-rusuh - 149119227521...",
+    "segments": 16,
+    "extraction_time": 7.8
+  },
+  {
+    "path": "features\\demo_videos\\1493475571649288_detected.npy",
+    "label": 0,
+    "label_name": "normal",
+    "video_file": "1493475571649288_detected.mp4",
+    "display_name": "Non-rusuh - 149347557164...",
+    "segments": 16,
+    "extraction_time": 7.9
+  },
+  {
+    "path": "features\\demo_videos\\1530312158767703_detected.npy",
+    "label": 0,
+    "label_name": "normal",
+    "video_file": "1530312158767703_detected.mp4",
+    "display_name": "Non-rusuh - 153031215876...",
+    "segments": 16,
+    "extraction_time": 7.8
+  }
+]

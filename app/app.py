@@ -334,33 +334,145 @@ elif page == "Demo Model":
 
     model = load_model()
 
-    tab_demo, tab_batch = st.tabs(["Single Video Demo", "Batch Test Set Evaluation"])
+    tab_video, tab_feature, tab_batch = st.tabs([
+        "🎬 Video Demo (Asli)", "📊 Feature Demo", "📈 Batch Test Set"
+    ])
 
-    with tab_demo:
-        st.markdown("### Pipeline Deteksi Kerusuhan")
+    # ===== VIDEO DEMO TAB (with actual video playback) =====
+    with tab_video:
+        st.markdown("### Demo dengan Video Asli")
         st.markdown(
-            "**Alur:** Video → Ekstraksi fitur S3D (16 segmen × 1024-d) "
-            "→ AttentionMIL → Skor Anomali [0-1]"
+            "Video diputar langsung, fitur S3D sudah diekstrak sebelumnya. "
+            "Model memprediksi dalam **< 1 detik**."
         )
+
+        DEMO_META_PATH = Path("features/demo_videos/demo_metadata.json")
+        VIDEO_DIR = Path("test_videos")
+
+        if DEMO_META_PATH.exists():
+            with open(DEMO_META_PATH) as f:
+                demo_meta = json.load(f)
+
+            # Split by label
+            normal_demos = [m for m in demo_meta if m["label"] == 0]
+            rusuh_demos = [m for m in demo_meta if m["label"] == 1]
+
+            demo_type = st.radio("Pilih tipe video:", ["Normal/Damai", "Rusuh"], horizontal=True, key="demo_type")
+            demo_pool = normal_demos if demo_type == "Normal/Damai" else rusuh_demos
+
+            if demo_pool:
+                selected_demo = st.selectbox(
+                    "Pilih video:",
+                    demo_pool,
+                    format_func=lambda x: x["display_name"],
+                    key="demo_video_select",
+                )
+
+                col_vid, col_pred = st.columns([1, 1.2])
+
+                with col_vid:
+                    video_path = VIDEO_DIR / selected_demo["video_file"]
+                    if video_path.exists():
+                        st.video(str(video_path))
+                    else:
+                        st.warning(f"Video file tidak ditemukan: {video_path}")
+
+                    st.caption(f"Sumber: `{selected_demo['video_file']}` | "
+                               f"Segmen: {selected_demo['segments']}")
+
+                with col_pred:
+                    if st.button("🔍 Predict Video Ini", type="primary", use_container_width=True):
+                        feat = np.load(selected_demo["path"])
+                        n_seg = min(16, feat.shape[0])
+                        feat_t = torch.FloatTensor(feat[:n_seg]).unsqueeze(0)
+
+                        with torch.no_grad():
+                            logits = model(feat_t)
+                        score = torch.sigmoid(logits).item()
+
+                        pred_label = "🔴 RUSUH" if score >= 0.5 else "🟢 NORMAL/DAMAI"
+                        confidence = max(score, 1 - score)
+                        true_label = "RUSUH" if selected_demo["label"] == 1 else "NORMAL/DAMAI"
+                        correct = (score >= 0.5) == (selected_demo["label"] == 1)
+
+                        fig = go.Figure(go.Indicator(
+                            mode="gauge+number+delta",
+                            value=score,
+                            title={"text": "Anomaly Score", "font": {"size": 18}},
+                            delta={"reference": 0.5, "increasing": {"color": "red"},
+                                   "decreasing": {"color": "green"}},
+                            gauge={
+                                "axis": {"range": [0, 1]},
+                                "bar": {"color": "red" if score >= 0.5 else "green"},
+                                "steps": [
+                                    {"range": [0, 0.5], "color": "lightgreen"},
+                                    {"range": [0.5, 1], "color": "lightcoral"},
+                                ],
+                                "threshold": {
+                                    "line": {"color": "black", "width": 4},
+                                    "thickness": 0.75, "value": 0.5
+                                }
+                            }
+                        ))
+                        fig.update_layout(height=250)
+                        st.plotly_chart(fig, use_container_width=True)
+
+                        col1, col2 = st.columns(2)
+                        col1.metric("Prediction", pred_label)
+                        col2.metric("Confidence", f"{confidence:.2%}")
+                        col3, col4 = st.columns(2)
+                        col3.metric("True Label", true_label)
+                        col4.metric("Status", "✅ Correct" if correct else "❌ Wrong",
+                                    delta_color="off")
+
+                        # Segment scores
+                        if selected_demo["segments"] > 1:
+                            seg_scores = []
+                            for i in range(n_seg):
+                                f_t = torch.FloatTensor(feat[i:i+1]).unsqueeze(0)
+                                with torch.no_grad():
+                                    s = torch.sigmoid(model(f_t)).item()
+                                seg_scores.append(s)
+
+                            st.subheader("Segment Scores")
+                            fig2, ax2 = plt.subplots(figsize=(8, 2.2))
+                            colors = ["#e74c3c" if s >= 0.5 else "#2ecc71" for s in seg_scores]
+                            ax2.bar(range(len(seg_scores)), seg_scores, color=colors, alpha=0.85)
+                            ax2.axhline(0.5, color="gray", ls="--")
+                            ax2.set_ylim(0, 1); ax2.set_xlabel("Segment"); ax2.set_ylabel("Score")
+                            st.pyplot(fig2)
+                    else:
+                        st.info("👈 Klik 'Predict Video Ini' untuk melihat hasil prediksi")
+            else:
+                st.warning("Tidak ada video demo untuk kelas ini.")
+        else:
+            st.warning(
+                "Video demo belum tersedia. Jalankan `preprocessing/extract_demo_videos.py` "
+                "untuk mengekstrak fitur video demo."
+            )
+
+    # ===== FEATURE DEMO TAB (559 test items) =====
+    with tab_feature:
+        st.markdown("### Demo dengan 559 Video Test")
         st.markdown(
-            "Pilih sample dari **559 video test**. Model akan memproses fitur "
-            "yang sudah diekstrak dan menampilkan hasil prediksi."
+            "Pilih sample dari dataset (fitur S3D yang sudah diekstrak). "
+            "Model memproses dan menampilkan hasil prediksi."
         )
 
         df, meta = load_metadata()
         test_items = [m for m in meta if m["split"] == "test"]
 
-        # Group by label
         normal_items = [m for m in test_items if m["label"] == 0]
         rusuh_items = [m for m in test_items if m["label"] == 1]
 
-        selected_type = st.radio("Pilih tipe video:", ["Normal/Damai", "Rusuh"], horizontal=True)
-        items_pool = normal_items if selected_type == "Normal/Damai" else rusuh_items
+        ftype = st.radio("Pilih tipe:", ["Normal/Damai", "Rusuh"], horizontal=True, key="ftype")
+        fpool = normal_items if ftype == "Normal/Damai" else rusuh_items
 
         selected_item = st.selectbox(
-            "Pilih sample (nama fitur):",
-            items_pool,
+            "Pilih sample:",
+            fpool,
             format_func=lambda x: Path(x["path"]).stem,
+            key="feat_select",
         )
 
         if st.button("🔍 Predict", type="primary", use_container_width=True):
@@ -378,73 +490,55 @@ elif page == "Demo Model":
 
             st.markdown("---")
 
-            # Two columns: pipeline diagram + results
-            col_res, col_gauge = st.columns([1, 1])
-
-            with col_gauge:
+            col_g, col_r = st.columns([1, 1])
+            with col_g:
                 fig = go.Figure(go.Indicator(
-                    mode="gauge+number+delta",
-                    value=score,
-                    title={"text": "Anomaly Score", "font": {"size": 20}},
+                    mode="gauge+number+delta", value=score,
+                    title={"text": "Anomaly Score", "font": {"size": 18}},
                     delta={"reference": 0.5, "increasing": {"color": "red"},
                            "decreasing": {"color": "green"}},
                     gauge={
                         "axis": {"range": [0, 1]},
                         "bar": {"color": "red" if score >= 0.5 else "green"},
-                        "steps": [
-                            {"range": [0, 0.5], "color": "lightgreen"},
-                            {"range": [0.5, 1], "color": "lightcoral"},
-                        ],
-                        "threshold": {
-                            "line": {"color": "black", "width": 4},
-                            "thickness": 0.75, "value": 0.5
-                        }
+                        "steps": [{"range": [0, 0.5], "color": "lightgreen"},
+                                  {"range": [0.5, 1], "color": "lightcoral"}],
+                        "threshold": {"line": {"color": "black", "width": 4},
+                                      "thickness": 0.75, "value": 0.5}
                     }
                 ))
-                fig.update_layout(height=280)
+                fig.update_layout(height=250)
                 st.plotly_chart(fig, use_container_width=True)
 
-            with col_res:
-                st.markdown("### Hasil Prediksi")
-                col_r1, col_r2 = st.columns(2)
-                col_r1.metric("Prediction", pred_label)
-                col_r2.metric("Confidence", f"{confidence:.2%}")
-                col_r3, col_r4 = st.columns(2)
-                col_r3.metric("True Label", true_label)
-                col_r4.metric("Status", "✅ Correct" if correct else "❌ Wrong")
-
-                st.markdown("---")
-                st.markdown("**Detail Input:**")
-                st.markdown(f"- Nama: `{Path(selected_item['path']).stem}`")
+            with col_r:
+                st.markdown("### Hasil")
+                c1, c2 = st.columns(2)
+                c1.metric("Prediction", pred_label)
+                c2.metric("Confidence", f"{confidence:.2%}")
+                c3, c4 = st.columns(2)
+                c3.metric("True Label", true_label)
+                c4.metric("Status", "✅ Correct" if correct else "❌ Wrong")
                 st.markdown(f"- Sumber: {selected_item.get('source', 'unknown')}")
                 st.markdown(f"- Segmen: {n_seg}")
 
-            # Score evolution chart
-            st.subheader("Segment-Level Score Evolution")
+            # Segment scores
             feat_all = np.load(selected_item["path"])
-            n_seg_all = min(16, feat_all.shape[0])
+            n_all = min(16, feat_all.shape[0])
             seg_scores = []
-            for i in range(n_seg_all):
+            for i in range(n_all):
                 f_t = torch.FloatTensor(feat_all[i:i+1]).unsqueeze(0)
                 with torch.no_grad():
                     s = torch.sigmoid(model(f_t)).item()
                 seg_scores.append(s)
 
-            fig, ax = plt.subplots(figsize=(10, 3.5))
-            colors_seg = ["#e74c3c" if s >= 0.5 else "#2ecc71" for s in seg_scores]
-            bars = ax.bar(range(n_seg_all), seg_scores, color=colors_seg, alpha=0.85, edgecolor="white")
+            st.subheader("Segment-Level Scores")
+            fig, ax = plt.subplots(figsize=(10, 3))
+            colors = ["#e74c3c" if s >= 0.5 else "#2ecc71" for s in seg_scores]
+            ax.bar(range(n_all), seg_scores, color=colors, alpha=0.85, edgecolor="white")
             ax.axhline(0.5, color="gray", ls="--", lw=2, label="Threshold = 0.5")
             ax.set_xlabel("Segment Index"); ax.set_ylabel("Anomaly Score")
             ax.set_title("Per-Segment Anomaly Scores", fontweight="bold")
-            ax.legend(); ax.set_ylim(0, 1); ax.set_xticks(range(n_seg_all))
+            ax.legend(); ax.set_ylim(0, 1); ax.set_xticks(range(n_all))
             st.pyplot(fig)
-
-            st.caption(
-                "**Cara membaca:** Setiap bar mewakili skor 1 segmen (16 frame). "
-                "Bar merah = segmen terdeteksi sebagai rusuh. Bar hijau = segmen normal. "
-                "Model menggabungkan semua segmen dengan attention weights untuk "
-                "menghasilkan prediksi akhir."
-            )
 
     with tab_batch:
         st.markdown("### Test Set Batch Evaluation")
