@@ -115,6 +115,99 @@ def predict_features(model, features):
     return torch.sigmoid(logits).item()
 
 
+@st.cache_resource
+def load_yolo():
+    from ultralytics import YOLO
+    return YOLO("yolov8n.pt")
+
+@st.cache_resource
+def load_s3d_extractor():
+    from preprocessing.feature_extractor import TemporalFeatureExtractor
+    return TemporalFeatureExtractor(architecture="s3d", device=DEVICE)
+
+def extract_frames_cap(video_path, max_frames=150):
+    import cv2
+    cap = cv2.VideoCapture(video_path)
+    frames = []
+    while len(frames) < max_frames:
+        ret, frame = cap.read()
+        if not ret:
+            break
+        frames.append(frame)
+    cap.release()
+    return frames
+
+def detect_persons_yolo(frame, model, conf=0.4):
+    results = model(frame, conf=conf, verbose=False)[0]
+    persons = []
+    if results.boxes is not None:
+        for box in results.boxes:
+            if int(box.cls[0]) == 0:
+                x1, y1, x2, y2 = map(int, box.xyxy[0])
+                persons.append((x1, y1, x2, y2, float(box.conf[0])))
+    return persons
+
+def draw_person_boxes(frame, boxes):
+    import cv2
+    for x1, y1, x2, y2, conf in boxes:
+        cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+        label = f"Person {conf:.2f}"
+        cv2.putText(frame, label, (x1, y1 - 8),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+    return frame
+
+def predict_upload_video(video_path, model, s3d, yolo):
+    import cv2
+    cap = cv2.VideoCapture(video_path)
+    orig_fps = cap.get(cv2.CAP_PROP_FPS)
+    if orig_fps <= 0:
+        orig_fps = 15
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    duration = total_frames / orig_fps if orig_fps else 0
+
+    frames_orig = []
+    while True:
+        ret, f = cap.read()
+        if not ret:
+            break
+        frames_orig.append(f)
+        if len(frames_orig) >= 300:
+            break
+    cap.release()
+
+    if len(frames_orig) < 16:
+        return None, frames_orig, orig_fps, "Video terlalu pendek (< 16 frame)"
+
+    sample_interval = max(1, round(orig_fps / 4))
+    frames_4fps = frames_orig[::sample_interval]
+
+    stride = 8
+    segments = []
+    for i in range(0, len(frames_4fps) - 16 + 1, stride):
+        seg = frames_4fps[i:i + 16]
+        segments.append(seg)
+        if len(segments) >= 16:
+            break
+
+    if not segments:
+        return None, frames_orig, orig_fps, "Tidak bisa membuat segmen"
+
+    features = s3d.extract_batch(segments)
+    n_seg = min(16, features.shape[0])
+    feat_t = torch.FloatTensor(features[:n_seg]).unsqueeze(0)
+
+    with torch.no_grad():
+        logits = model(feat_t)
+    score = torch.sigmoid(logits).item()
+
+    yolo_max = min(len(frames_orig), 150)
+    for idx in range(0, yolo_max, 2):
+        persons = detect_persons_yolo(frames_orig[idx], yolo)
+        frames_orig[idx] = draw_person_boxes(frames_orig[idx], persons)
+
+    return score, frames_orig[:yolo_max], orig_fps, None
+
+
 # ---- SIDEBAR ----
 st.sidebar.title("☰ Menu Navigasi")
 page = st.sidebar.radio(
@@ -370,7 +463,7 @@ elif page == "Demo Model":
 
     tab_video, tab_feature, tab_batch, tab_upload, tab_webcam = st.tabs([
         "🎬 Video Demo (Asli)", "📊 Feature Demo", "📈 Batch Test Set",
-        "📤 Upload Video", "🎥 Webcam"
+        "📤 Upload Video", "🎥 CCTV Live"
     ])
 
     # ===== VIDEO DEMO TAB (with actual video playback) =====
@@ -414,40 +507,23 @@ elif page == "Demo Model":
 
                 with col_vid:
                     video_path = VIDEO_DIR / selected_demo["video_file"]
-                    show_bbox = st.checkbox("Tampilkan Bounding Box", key="bbox_demo")
+                    show_bbox = st.checkbox("Tampilkan Bounding Box (YOLO)", key="bbox_demo")
 
                     if show_bbox and video_path.exists():
-                        import cv2
-                        import numpy as np
+                        yolo = load_yolo()
                         cap = cv2.VideoCapture(str(video_path))
-                        frames_bb = []
                         total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
                         total = min(total, 150)
+                        frames_bb = []
                         bprog = st.progress(0)
-                        ret, prev = cap.read()
-                        if ret:
-                            prev_gray = cv2.GaussianBlur(
-                                cv2.cvtColor(prev, cv2.COLOR_BGR2GRAY), (5, 5), 0)
-                            for fi in range(total - 1):
-                                ret, fr = cap.read()
-                                if not ret:
-                                    break
-                                gray = cv2.GaussianBlur(
-                                    cv2.cvtColor(fr, cv2.COLOR_BGR2GRAY), (5, 5), 0)
-                                diff = cv2.absdiff(prev_gray, gray)
-                                _, th = cv2.threshold(diff, 30, 255, cv2.THRESH_BINARY)
-                                th = cv2.morphologyEx(th, cv2.MORPH_OPEN,
-                                    cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5)))
-                                cnts, _ = cv2.findContours(th, cv2.RETR_EXTERNAL,
-                                                           cv2.CHAIN_APPROX_SIMPLE)
-                                for c in cnts:
-                                    if cv2.contourArea(c) < 200:
-                                        continue
-                                    x, y, w, h = cv2.boundingRect(c)
-                                    cv2.rectangle(fr, (x, y), (x + w, y + h), (0, 255, 0), 2)
-                                frames_bb.append(fr)
-                                prev_gray = gray
-                                bprog.progress((fi + 1) / total)
+                        for fi in range(total):
+                            ret, fr = cap.read()
+                            if not ret:
+                                break
+                            persons = detect_persons_yolo(fr, yolo)
+                            fr = draw_person_boxes(fr, persons)
+                            frames_bb.append(fr)
+                            bprog.progress((fi + 1) / total)
                         cap.release()
 
                         if frames_bb:
@@ -699,11 +775,11 @@ elif page == "Demo Model":
 
     # ===== UPLOAD & DETECT TAB =====
     with tab_upload:
-        st.markdown("### Upload Video + Deteksi Bounding Box")
+        st.markdown("### Upload Video + Deteksi Kerusuhan")
         st.markdown(
-            "Upload video Anda sendiri. Sistem akan mendeteksi area bergerak "
-            "menggunakan *frame differencing* dan menampilkan bounding box "
-            "pada setiap frame."
+            "Upload video Anda sendiri. Sistem akan mengekstrak fitur "
+            "menggunakan **S3D**, memprediksi dengan **AttentionMIL**, "
+            "dan menampilkan bounding box **YOLO** pada setiap frame."
         )
 
         uploaded_file = st.file_uploader(
@@ -713,149 +789,135 @@ elif page == "Demo Model":
         )
 
         if uploaded_file is not None:
-            import cv2
             from tempfile import NamedTemporaryFile
 
             tfile = NamedTemporaryFile(delete=False, suffix=".mp4")
             tfile.write(uploaded_file.read())
             tfile.close()
 
+            import cv2
             cap = cv2.VideoCapture(tfile.name)
-            fps = int(cap.get(cv2.CAP_PROP_FPS)) or 15
+            fps = cap.get(cv2.CAP_PROP_FPS)
             total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
             duration = total_frames / fps if fps else 0
+            cap.release()
 
             st.markdown(f"**File:** {uploaded_file.name} | **Durasi:** {duration:.1f}s | **Frame:** {total_frames}")
 
-            frame_buffer = []
-            max_frames = min(total_frames, fps * 8)
+            if st.button("▶️ Process Video", type="primary", width='stretch'):
+                with st.spinner("Memuat model..."):
+                    model_atn = load_model()
+                    s3d = load_s3d_extractor()
+                    yolo = load_yolo()
 
-            progress = st.progress(0)
-            status = st.empty()
+                prog = st.progress(0)
+                status = st.empty()
+                status.text("Membaca frame video...")
 
-            ret, prev = cap.read()
-            if not ret:
-                st.error("Tidak bisa membaca video.")
+                score, frames_out, vid_fps, err = predict_upload_video(tfile.name, model_atn, s3d, yolo)
+
+                prog.progress(100)
+                status.text("Selesai!")
                 os.unlink(tfile.name)
-                st.stop()
-            prev_gray = cv2.cvtColor(prev, cv2.COLOR_BGR2GRAY)
-            prev_gray = cv2.GaussianBlur(prev_gray, (5, 5), 0)
 
-            motion_areas = []
-            for idx in range(max_frames):
-                ret, frame = cap.read()
-                if not ret:
-                    break
-                gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-                gray = cv2.GaussianBlur(gray, (5, 5), 0)
-                diff = cv2.absdiff(prev_gray, gray)
-                _, thresh = cv2.threshold(diff, 30, 255, cv2.THRESH_BINARY)
-                kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
-                thresh = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel)
-                cnts, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-                valid = [c for c in cnts if cv2.contourArea(c) >= 200]
-                motion_areas.append(len(valid))
-                for c in valid:
-                    x, y, w, h = cv2.boundingRect(c)
-                    cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
-                frame_buffer.append(frame)
-                prev_gray = gray
-                progress.progress((idx + 1) / max_frames)
-                status.text(f"Frame {idx + 1}/{max_frames} | Objek bergerak: {len(valid)}")
+                if err:
+                    st.error(err)
+                    st.stop()
 
-            cap.release()
-            os.unlink(tfile.name)
+                pred_label = "🔴 RUSUH" if score >= 0.5 else "🟢 NORMAL/DAMAI"
+                confidence = max(score, 1 - score)
 
-            if not frame_buffer:
-                st.error("Tidak bisa membaca video. Coba file lain.")
-                st.stop()
+                st.markdown("---")
+                col_a, col_b, col_c, col_d = st.columns(4)
+                col_a.metric("Anomaly Score", f"{score:.4f}")
+                col_b.metric("Prediksi", pred_label)
+                col_c.metric("Confidence", f"{confidence:.2%}")
+                col_d.metric("Frame Diproses", str(len(frames_out)))
 
-            avg_motion = sum(motion_areas) / len(motion_areas) if motion_areas else 0
-            max_motion = max(motion_areas) if motion_areas else 0
-            chaos_score = min(avg_motion / 3.0, 1.0)
-            pred_upload = "🔴 RUSUH" if chaos_score >= 0.5 else "🟢 NORMAL/DAMAI"
+                fig_g = go.Figure(go.Indicator(
+                    mode="gauge+number", value=score,
+                    title={"text": "Anomaly Score", "font": {"size": 18}},
+                    gauge={
+                        "axis": {"range": [0, 1]},
+                        "bar": {"color": "red" if score >= 0.5 else "green"},
+                        "steps": [{"range": [0, 0.5], "color": "lightgreen"},
+                                  {"range": [0.5, 1], "color": "lightcoral"}],
+                        "threshold": {"line": {"color": "black", "width": 4},
+                                      "thickness": 0.75, "value": 0.5}
+                    }
+                ))
+                fig_g.update_layout(height=250)
+                st.plotly_chart(fig_g, width='stretch')
 
-            st.markdown("---")
-            col_um1, col_um2, col_um3, col_um4 = st.columns(4)
-            col_um1.metric("Rata-rata Objek/Frame", f"{avg_motion:.1f}")
-            col_um2.metric("Maks Objek/Frame", str(max_motion))
-            col_um3.metric("Chaos Score", f"{chaos_score:.2%}")
-            col_um4.metric("Prediksi", pred_upload)
+                out_path = tfile.name.replace(".mp4", "_out.mp4")
+                h, w = frames_out[0].shape[:2]
+                fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+                out_writer = cv2.VideoWriter(out_path, fourcc, 10, (w, h))
+                for frm in frames_out:
+                    out_writer.write(frm)
+                out_writer.release()
 
-            out_path = tfile.name.replace(".mp4", "_out.mp4")
-            h, w = frame_buffer[0].shape[:2]
-            fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-            out = cv2.VideoWriter(out_path, fourcc, fps, (w, h))
-            for frm in frame_buffer:
-                out.write(frm)
-            out.release()
-
-            with open(out_path, "rb") as f:
-                st.download_button(
-                    "⬇️ Download Video Hasil",
-                    data=f,
-                    file_name=f"detected_{uploaded_file.name}",
-                    mime="video/mp4",
-                )
-            os.unlink(out_path)
+                with open(out_path, "rb") as f:
+                    st.download_button(
+                        "⬇️ Download Video Hasil (YOLO Bounding Box)",
+                        data=f,
+                        file_name=f"hasil_{uploaded_file.name}",
+                        mime="video/mp4",
+                    )
+                os.unlink(out_path)
         else:
             st.info("Silakan upload video untuk memulai deteksi.")
 
         st.markdown("---")
         st.caption(
-            "Bounding box berdasarkan deteksi gerakan (background subtraction). "
-            "Klasifikasi berdasarkan intensitas pergerakan per frame."
+            "Pipeline: Frame Extraction → S3D Feature Extraction → AttentionMIL Prediction → "
+            "YOLOv8 Person Detection + Bounding Box."
         )
 
     # ===== WEBCAM TAB =====
     with tab_webcam:
-        st.markdown("### Webcam - Deteksi Wajah")
+        st.markdown("### CCTV - Deteksi Orang (YOLOv8)")
         st.markdown(
-            "Ambil foto dari webcam. Sistem akan mendeteksi wajah menggunakan "
-            "OpenCV FaceDetectorYN dan menampilkan bounding box."
+            "Deteksi orang secara **real-time** menggunakan YOLOv8. "
+            "Ambil foto dari webcam untuk memeriksa jumlah orang dan status keamanan."
         )
 
-        cam_img = st.camera_input("Ambil foto dari webcam", key="webcam")
+        cont_mode = st.checkbox("Mode CCTV Otomatis (refresh tiap 3 detik)", key="cctv_auto")
+        cam_img = st.camera_input("Ambil foto dari webcam", key="webcam_cctv", disabled=cont_mode)
 
         if cam_img is not None:
-            import cv2
-            import numpy as np
-
+            yolo = load_yolo()
             bytes_data = cam_img.getvalue()
             arr = np.frombuffer(bytes_data, np.uint8)
             img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
 
-            gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-            face_cascade = cv2.CascadeClassifier(
-                cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
-            faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1,
-                                                   minNeighbors=5, minSize=(60, 60))
-
-            for (x, y, w, h) in faces:
-                cv2.rectangle(img, (x, y), (x + w, y + h), (0, 255, 0), 2)
-                cv2.putText(img, "Wajah", (x, y - 5),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
-
+            persons = detect_persons_yolo(img, yolo)
+            img = draw_person_boxes(img, persons)
             img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
             col_wc1, col_wc2 = st.columns(2)
             with col_wc1:
                 st.image(cam_img, caption="Foto Asli", width='stretch')
             with col_wc2:
-                st.image(img_rgb, caption=f"Deteksi ({len(faces)} wajah)", width='stretch')
+                st.image(img_rgb, caption=f"Deteksi ({len(persons)} orang)", width='stretch')
 
-            n_faces = len(faces)
-            if n_faces == 0:
-                wc_status = "🟢 Tidak ada wajah terdeteksi"
-            elif n_faces <= 2:
-                wc_status = "🟡 Waspada - Beberapa orang"
-            elif n_faces <= 5:
-                wc_status = "🟠 Siaga - Keramaian"
+            n = len(persons)
+            if n == 0:
+                wc_status = "🟢 AMAN - Tidak ada orang"
+            elif n <= 2:
+                wc_status = "🟡 WASPADA - Beberapa orang"
+            elif n <= 5:
+                wc_status = "🟠 SIAGA - Keramaian"
             else:
                 wc_status = "🔴 RUSUH - Kerumunan besar"
 
-            st.markdown(f"**Hasil:** {wc_status}")
-            st.metric("Jumlah Wajah Terdeteksi", n_faces)
+            st.markdown(f"**Status:** {wc_status}")
+            st.metric("Jumlah Orang Terdeteksi", n)
+
+            if cont_mode:
+                import time
+                time.sleep(3)
+                st.rerun()
         else:
             st.info("Klik 'Ambil foto' untuk mengaktifkan webcam.")
 
@@ -1197,9 +1259,11 @@ elif page == "Dokumentasi":
             **Fungsi:** Prediksi interaktif dengan video asli atau fitur dataset.
 
             **Tabs:**
-            - **Video Demo** — Pilih video Rusuh -> klik Predict -> lihat gauge chart + segment scores. Video diputar langsung.
+            - **Video Demo** — Pilih video Rusuh -> Predict -> lihat gauge chart + segment scores. Video diputar langsung dengan bounding box YOLO.
             - **Feature Demo** — Pilih sample Normal/Rusuh -> Predict -> lihat hasil + segment scores
             - **Batch Test Set** — Run Batch Evaluation -> evaluasi 559 test video -> ROC, CM, report
+            - **Upload Video** — Upload video sendiri -> otomatis ekstrak fitur S3D -> prediksi AttentionMIL -> bounding box YOLO
+            - **CCTV Live** — Webcam langsung dengan deteksi YOLO + status keamanan real-time
             """)
 
         with st.expander("4. Evaluasi & Interpretasi"):
@@ -1228,6 +1292,8 @@ elif page == "Dokumentasi":
         - PCA & t-SNE butuh waktu loading (~30 detik)
         - Batch Test Set proses 559 video (~2-3 menit)
         - Video Demo hanya untuk format H.264 (didukung browser)
+        - Upload Video: proses frame + S3D + YOLO butuh ~10-30 detik tergantung durasi
+        - CCTV Live: centang "Mode CCTV Otomatis" untuk monitoring berkelanjutan
         - Gunakan sidebar untuk navigasi
         """)
 

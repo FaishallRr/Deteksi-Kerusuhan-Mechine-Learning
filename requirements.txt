@@ -1,5 +1,6 @@
 streamlit>=1.28.0
 torch>=2.0.0
+torchvision>=0.15.0
 numpy>=1.24.0
 pandas>=2.0.0
 matplotlib>=3.7.0
@@ -12,3 +13,4 @@ scipy>=1.10.0
 tqdm>=4.65.0
 xgboost>=2.0.0
 shap>=0.44.0
+ultralytics>=8.0.0
