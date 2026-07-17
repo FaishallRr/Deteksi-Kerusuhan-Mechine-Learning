@@ -368,8 +368,9 @@ elif page == "Demo Model":
 
     model = load_model()
 
-    tab_video, tab_feature, tab_batch = st.tabs([
-        "🎬 Video Demo (Asli)", "📊 Feature Demo", "📈 Batch Test Set"
+    tab_video, tab_feature, tab_batch, tab_upload, tab_webcam = st.tabs([
+        "🎬 Video Demo (Asli)", "📊 Feature Demo", "📈 Batch Test Set",
+        "📤 Upload Video", "🎥 Webcam"
     ])
 
     # ===== VIDEO DEMO TAB (with actual video playback) =====
@@ -413,7 +414,44 @@ elif page == "Demo Model":
 
                 with col_vid:
                     video_path = VIDEO_DIR / selected_demo["video_file"]
-                    if video_path.exists():
+                    show_bbox = st.checkbox("Tampilkan Bounding Box", key="bbox_demo")
+
+                    if show_bbox and video_path.exists():
+                        import cv2
+                        cap = cv2.VideoCapture(str(video_path))
+                        hog = cv2.HOGDescriptor()
+                        hog.setSVMDetector(cv2.HOGDescriptor_getDefaultPeopleDetector())
+                        frames_bb = []
+                        total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+                        total = min(total, 150)
+                        bprog = st.progress(0)
+                        for fi in range(total):
+                            ret, fr = cap.read()
+                            if not ret:
+                                break
+                            boxes, _ = hog.detectMultiScale(
+                                cv2.cvtColor(fr, cv2.COLOR_BGR2RGB),
+                                winStride=(4, 4), padding=(8, 8), scale=1.05
+                            )
+                            for (x, y, w, h) in boxes:
+                                cv2.rectangle(fr, (x, y), (x + w, y + h), (0, 255, 0), 2)
+                            frames_bb.append(fr)
+                            bprog.progress((fi + 1) / total)
+                        cap.release()
+
+                        if frames_bb:
+                            out_p = str(video_path).replace(".mp4", "_bbox.mp4")
+                            h, w = frames_bb[0].shape[:2]
+                            out = cv2.VideoWriter(out_p, cv2.VideoWriter_fourcc(*"mp4v"),
+                                                 15, (w, h))
+                            for f in frames_bb:
+                                out.write(f)
+                            out.release()
+                            st.video(out_p)
+                            os.unlink(out_p)
+                        else:
+                            st.video(str(video_path))
+                    elif video_path.exists():
                         st.video(str(video_path))
                     else:
                         st.warning(f"Video file tidak ditemukan: {video_path}")
@@ -570,7 +608,7 @@ elif page == "Demo Model":
                 st.markdown(f"- Segmen: {n_seg}")
 
             # Segment scores
-                        feat_all = feat
+            feat_all = feat
             n_all = min(16, feat_all.shape[0])
             seg_scores = []
             for i in range(n_all):
@@ -647,6 +685,156 @@ elif page == "Demo Model":
                                            target_names=["Normal/Damai", "Rusuh"],
                                            output_dict=True, zero_division=0)
             st.dataframe(pd.DataFrame(report).transpose().round(4))
+
+    # ===== UPLOAD & DETECT TAB =====
+    with tab_upload:
+        st.markdown("### Upload Video + Deteksi Bounding Box")
+        st.markdown(
+            "Upload video Anda sendiri. Sistem akan mendeteksi orang menggunakan "
+            "*Histogram of Oriented Gradients (HOG)* dan menampilkan bounding box "
+            "pada setiap frame. Aktivitas diklasifikasikan berdasarkan kepadatan "
+            "dan pergerakan yang terdeteksi."
+        )
+
+        uploaded_file = st.file_uploader(
+            "Pilih video (mp4, avi, mov)",
+            type=["mp4", "avi", "mov"],
+            key="upload_video",
+        )
+
+        if uploaded_file is not None:
+            import cv2
+            from tempfile import NamedTemporaryFile
+
+            tfile = NamedTemporaryFile(delete=False, suffix=".mp4")
+            tfile.write(uploaded_file.read())
+            tfile.close()
+
+            cap = cv2.VideoCapture(tfile.name)
+            fps = int(cap.get(cv2.CAP_PROP_FPS)) or 15
+            total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+            duration = total_frames / fps if fps else 0
+
+            st.markdown(f"**File:** {uploaded_file.name} | **Durasi:** {duration:.1f}s | **Frame:** {total_frames}")
+
+            hog = cv2.HOGDescriptor()
+            hog.setSVMDetector(cv2.HOGDescriptor_getDefaultPeopleDetector())
+
+            frame_buffer = []
+            max_frames = min(total_frames, fps * 10)
+
+            progress = st.progress(0)
+            status = st.empty()
+
+            person_counts = []
+            for idx in range(max_frames):
+                ret, frame = cap.read()
+                if not ret:
+                    break
+                rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                boxes, _ = hog.detectMultiScale(rgb, winStride=(4, 4), padding=(8, 8), scale=1.05)
+                person_counts.append(len(boxes))
+                for (x, y, w, h) in boxes:
+                    cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
+                frame_buffer.append(frame)
+                progress.progress((idx + 1) / max_frames)
+                status.text(f"Frame {idx + 1}/{max_frames} | Orang terdeteksi: {len(boxes)}")
+
+            cap.release()
+            os.unlink(tfile.name)
+
+            if not frame_buffer:
+                st.error("Tidak bisa membaca video. Coba file lain.")
+                st.stop()
+
+            avg_people = sum(person_counts) / len(person_counts) if person_counts else 0
+            max_people = max(person_counts) if person_counts else 0
+            chaos_score = min(avg_people / 5.0, 1.0)
+            pred_upload = "🔴 RUSUH" if chaos_score >= 0.5 else "🟢 NORMAL/DAMAI"
+
+            st.markdown("---")
+            col_um1, col_um2, col_um3, col_um4 = st.columns(4)
+            col_um1.metric("Rata-rata Orang/Frame", f"{avg_people:.1f}")
+            col_um2.metric("Maks Orang/Frame", str(max_people))
+            col_um3.metric("Chaos Score", f"{chaos_score:.2%}")
+            col_um4.metric("Prediksi", pred_upload)
+
+            out_path = tfile.name.replace(".mp4", "_out.mp4")
+            h, w = frame_buffer[0].shape[:2]
+            fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+            out = cv2.VideoWriter(out_path, fourcc, fps, (w, h))
+            for frm in frame_buffer:
+                out.write(frm)
+            out.release()
+
+            with open(out_path, "rb") as f:
+                st.download_button(
+                    "⬇️ Download Video Hasil",
+                    data=f,
+                    file_name=f"detected_{uploaded_file.name}",
+                    mime="video/mp4",
+                )
+            os.unlink(out_path)
+        else:
+            st.info("Silakan upload video untuk memulai deteksi.")
+
+        st.markdown("---")
+        st.caption(
+            "Deteksi menggunakan HOG People Detector (OpenCV). "
+            "Klasifikasi berdasarkan kepadatan orang per frame."
+        )
+
+    # ===== WEBCAM TAB =====
+    with tab_webcam:
+        st.markdown("### Webcam - Deteksi Real-time")
+        st.markdown(
+            "Ambil foto dari webcam. Sistem akan mendeteksi orang dalam gambar "
+            "dan menampilkan bounding box beserta analisis keramaian."
+        )
+
+        cam_img = st.camera_input("Ambil foto dari webcam", key="webcam")
+
+        if cam_img is not None:
+            import cv2
+            import numpy as np
+
+            bytes_data = cam_img.getvalue()
+            arr = np.frombuffer(bytes_data, np.uint8)
+            img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+
+            hog = cv2.HOGDescriptor()
+            hog.setSVMDetector(cv2.HOGDescriptor_getDefaultPeopleDetector())
+
+            rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+            boxes, _ = hog.detectMultiScale(rgb, winStride=(4, 4), padding=(8, 8), scale=1.05)
+
+            for (x, y, w, h) in boxes:
+                cv2.rectangle(img, (x, y), (x + w, y + h), (0, 255, 0), 2)
+                cv2.putText(img, "Person", (x, y - 5),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
+
+            img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+
+            col_wc1, col_wc2 = st.columns(2)
+            with col_wc1:
+                st.image(cam_img, caption="Foto Asli", width='stretch')
+            with col_wc2:
+                st.image(img_rgb, caption=f"Deteksi ({len(boxes)} orang)", width='stretch')
+
+            people = len(boxes)
+            if people == 0:
+                wc_status = "🟢 Aman - Tidak ada orang terdeteksi"
+            elif people <= 3:
+                wc_status = "🟡 Waspada - Keramaian rendah"
+            elif people <= 6:
+                wc_status = "🟠 Siaga - Keramaian sedang"
+            else:
+                wc_status = "🔴 RUSUH - Keramaian tinggi"
+
+            st.markdown(f"**Hasil:** {wc_status}")
+            st.metric("Jumlah Orang Terdeteksi", people)
+        else:
+            st.info("Klik 'Ambil foto' untuk mengaktifkan webcam.")
 
 
 elif page == "Evaluasi & Interpretasi":
