@@ -18,13 +18,13 @@
     "extraction_time": 8.0
   },
   {
-    "path": "features\\demo_videos\\tawuran_grogol.npy",
+    "path": "features\\demo_videos\\u3EyoqRiEyI.npy",
     "label": 1,
     "label_name": "rusuh",
-    "video_file": "tawuran_grogol.mp4",
-    "display_name": "Rusuh - tawuran Grogol",
-    "segments": 26,
-    "extraction_time": 12.8
+    "video_file": "u3EyoqRiEyI.mp4",
+    "display_name": "Rusuh - tawuran YouTube #2",
+    "segments": 18,
+    "extraction_time": 18.5
   },
   {
     "path": "features\\demo_videos\\yt_tawuran_hQ98fJ-KITQ.npy",

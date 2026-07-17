@@ -18,7 +18,7 @@ MAX_SEGMENTS = 200
 RUSUH_VIDEOS = [
     ("fight_sample_1.mp4", "Rusuh - tawuran (CCTV)"),
     ("fight_sample_2.mp4", "Rusuh - tawuran (CCTV #2)"),
-    ("tawuran_grogol.mp4", "Rusuh - tawuran Grogol"),
+    ("u3EyoqRiEyI.mp4", "Rusuh - tawuran YouTube #2"),
     ("yt_tawuran_hQ98fJ-KITQ.mp4", "Rusuh - tawuran YouTube"),
 ]
 NORMAL_VIDEOS = []

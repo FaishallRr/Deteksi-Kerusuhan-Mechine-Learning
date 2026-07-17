@@ -216,7 +216,7 @@ md("""**Insight:** PCA menunjukkan separabilitas antara kelas rusuh dan normal, 
 md("""## 10. t-SNE Visualization""")
 
 code("""print("Running t-SNE...")
-tsne = TSNE(n_components=2, random_state=42, perplexity=30, n_iter=1000)
+tsne = TSNE(n_components=2, random_state=42, perplexity=30, max_iter=1000)
 features_tsne = tsne.fit_transform(features)
 
 fig, ax = plt.subplots(figsize=(10, 8))

@@ -97,7 +97,7 @@ def predict_features(model, features):
 st.sidebar.title("☰ Menu Navigasi")
 page = st.sidebar.radio(
     "Pilih Halaman",
-    ["Beranda", "Exploratory Data Analysis", "Demo Model", "Evaluasi & Interpretasi"],
+    ["Beranda", "Exploratory Data Analysis", "Demo Model", "Evaluasi & Interpretasi", "Dokumentasi"],
 )
 
 st.sidebar.markdown("---")
@@ -357,20 +357,17 @@ elif page == "Demo Model":
             normal_demos = [m for m in demo_meta if m["label"] == 0]
             rusuh_demos = [m for m in demo_meta if m["label"] == 1]
 
-            demo_type = st.radio("Pilih tipe video:", ["Rusuh (dengan video)", "Normal/Damai (fitur)"], horizontal=True, key="demo_type")
-
-            if demo_type == "Rusuh (dengan video)":
-                demo_pool = rusuh_demos
-                show_video = True
+            if normal_demos:
+                demo_type = st.radio("Pilih tipe video:", ["Rusuh (dengan video)", "Normal/Damai (fitur)"], horizontal=True, key="demo_type")
+                if demo_type == "Normal/Damai (fitur)":
+                    demo_pool = normal_demos
+                else:
+                    demo_pool = rusuh_demos
             else:
-                st.info(
-                    "📹 Video normal H.264 tidak tersedia. "
-                    "Gunakan tab **Feature Demo** untuk menguji video normal."
-                )
-                demo_pool = []
-                show_video = False
+                st.info("Untuk video **Normal/Damai**, gunakan tab **Feature Demo** di atas.")
+                demo_pool = rusuh_demos
 
-            if demo_pool and show_video:
+            if demo_pool:
                 selected_demo = st.selectbox(
                     "Pilih video:",
                     demo_pool,
@@ -760,4 +757,256 @@ elif page == "Evaluasi & Interpretasi":
         - Data split: 80/10/10
 
         **Feature Extractor:** S3D (Separable 3D CNN) - pretrained on Kinetics-400
+        """)
+
+elif page == "Dokumentasi":
+    st.title(" Dokumentasi Proyek")
+    st.markdown("---")
+
+    tab_dset, tab_metodologi, tab_usage, tab_ref = st.tabs([
+        " Dataset", " Metodologi", " Cara Penggunaan", " Referensi"
+    ])
+
+    with tab_dset:
+        st.header("Dataset")
+        st.markdown("""
+        Proyek ini menggunakan dataset video dari berbagai sumber untuk mendeteksi
+        kerusuhan (perkelahian, tawuran, kerusuhan massa) vs aktivitas normal/damai.
+
+        **Total Video:** 5.552
+        **Kelas:** 3 kelas awal (demo_rusuh=kerusuhan, demo_damai=normal, normal=ucf)
+        **Final:** 2 kelas biner — Rusuh (1) vs Normal/Damai (0)
+        **Split:** Train 4.440 (80%) | Val 553 (10%) | Test 559 (10%)
+        """)
+
+        st.subheader("Sumber Data")
+        col_s1, col_s2 = st.columns(2)
+        with col_s1:
+            st.markdown("""
+            **1. UCF Crime (Kaggle)**
+            - 1.900 video abnormal (perkelahian, perampokan, dll.)
+            - 950 video normal (walking, driving, dll.)
+            - Resolusi 320x240, durasi bervariasi
+
+            **2. SCVD (Surveillance Camera Violence Dataset)**
+            - 1.659 video kekerasan dari CCTV
+            - Anotasi frame-level
+            """)
+        with col_s2:
+            st.markdown("""
+            **3. MSV-PG (Moderating Severe Violence - Playground)**
+            - Dataset kekerasan dari playground CCTV
+            - 600+ video pertengkaran
+
+            **4. YouTube & Instagram (Scraped)**
+            - Video tawuran Indonesia (CCTV, amatir)
+            - Video normal/damai aktivitas sehari-hari
+            - 500+ video dari berbagai kanal
+
+            **5. Real Life Nonviolence**
+            - 900+ video interaksi non-kekerasan
+            - Sumber: dataset akademik
+            """)
+
+        st.subheader("Distribusi Fitur")
+        st.markdown("""
+        - **Feature Extractor:** S3D (Separable 3D CNN) pretrained on Kinetics-400
+        - **Dimensi Fitur:** 1024-d per segmen video
+        - **Segmentasi:** 16 frame per segmen (4 FPS x 4 detik)
+        - **Stride:** 8 frame antar segmen (overlapping 50%)
+        """)
+
+        st.subheader("Preprocessing Pipeline")
+        st.markdown("""
+        1. **Frame Extraction:** Video dibaca dengan OpenCV, di-resize ke 224x224
+        2. **Resampling:** Frame disampling ke 4 FPS
+        3. **Segmentasi:** 16 frame berurutan = 1 segmen (~ 4 detik video)
+        4. **Feature Extraction:** Setiap segmen -> S3D -> 1024-d feature vector
+        5. **Normalization:** Mean=[0.485,0.456,0.406], Std=[0.229,0.224,0.225]
+        6. **Label Mapping:** 3 kelas -> biner (Rusuh/Normal)
+        7. **Split:** Stratified 80/10/10
+        """)
+
+    with tab_metodologi:
+        st.header("Metodologi")
+
+        st.subheader("Pipeline End-to-End")
+        st.markdown("""
+        **Langkah 1: Frame Extraction**
+        - Video dibaca frame per frame menggunakan OpenCV
+        - Disampling ke 4 FPS (frame per detik)
+        - Frame di-resize ke 224x224 piksel
+
+        **Langkah 2: Segmentasi Temporal**
+        - 16 frame berurutan = 1 segmen (~4 detik video)
+        - Stride 8 frame (overlap 50%) antar segmen
+        - Video pendek (< 16 frame) dilewati
+
+        **Langkah 3: Feature Extraction (S3D)**
+        - Setiap segmen diproses oleh S3D (Separable 3D CNN)
+        - Pretrained pada Kinetics-400 (video classification)
+        - Output: 1 vektor 1024-d per segmen
+
+        **Langkah 4: AttentionMIL Model**
+        - 16 segmen x 1024-d sebagai input
+        - Attention network memberi bobot ke setiap segmen
+        - Classifier MLP memproses bag representation
+        - Sigmoid output: anomaly score [0, 1]
+
+        **Langkah 5: Evaluasi**
+        - Threshold 0.5 -> >= 0.5 = RUSUH
+        - Metrics: AUC, Accuracy, F1, Precision, Recall, MCC
+        """)
+
+        st.subheader("Model: AttentionMIL")
+        st.markdown("""
+        Attention-based Multiple Instance Learning (MIL) memperlakukan setiap
+        video sebagai **bag** (kumpulan segmen/instance). Model belajar memberikan
+        **attention weight** ke setiap segmen, sehingga segmen yang paling relevan
+        (mengandung kerusuhan) mendapat bobot tertinggi.
+
+        **Parameter:** 558.082
+        **Input:** 16 segments x 1024-d S3D features
+        **Output:** Anomaly score [0, 1] (>= 0.5 = Rusuh)
+        """)
+
+        st.subheader("Training Details")
+        col_tr1, col_tr2 = st.columns(2)
+        with col_tr1:
+            st.markdown("""
+            - Optimizer: Adam (lr=0.001)
+            - Loss: Binary Cross-Entropy
+            - Batch Size: 32
+            - Epochs: 50 (early stopping)
+            - Data Split: 80/10/10
+            - Device: CPU/GPU
+            """)
+        with col_tr2:
+            st.markdown("""
+            - Weight Decay: 1e-4
+            - Early Stopping Patience: 10
+            - Best Val AUC: 0.9563
+            - Best Val Accuracy: 89.09%
+            - Augmentasi: Weather augmentation
+            """)
+
+        st.subheader("Model Comparison")
+        st.markdown("""
+        | Model | AUC | Accuracy | F1 | Precision | Recall |
+        |-------|-----|----------|----|-----------|--------|
+        | XGBoost (baseline) | 0.9440 | 87.30% | 0.8426 | 0.8597 | 0.8261 |
+        | AttentionMIL (final) | **0.9563** | **89.09%** | **0.8683** | **0.8627** | **0.8739** |
+
+        **Kesimpulan:** AttentionMIL unggul di semua metrik karena mampu menangkap
+        konteks temporal dan fokus ke segmen kerusuhan via attention mechanism.
+        """)
+
+        st.subheader("Interpretasi Model")
+        st.markdown("""
+        1. **Attention Weights** — Segmen dengan weight tinggi -> kontribusi besar
+        2. **Feature Ablation** — Mengukur dampak tiap segmen terhadap skor akhir
+        3. **Score Evolution** — Skor berubah seiring bertambahnya segmen
+        4. **SHAP Analysis (XGBoost)** — Feature importance untuk model baseline
+
+        **Insight:** Model fokus ke segmen dengan gerakan cepat/abnormal (pukulan,
+        kejar-mengejar, lemparan). Segmen akhir video cenderung lebih penting.
+        """)
+
+    with tab_usage:
+        st.header("Cara Penggunaan Aplikasi")
+        st.markdown("Aplikasi memiliki 5 halaman yang dapat diakses via sidebar.")
+
+        with st.expander("1. Beranda — Halaman Utama"):
+            st.markdown("""
+            **Fungsi:** Ringkasan proyek, metrik model, visualisasi utama.
+
+            **Cara pakai:**
+            1. Buka aplikasi -> langsung ke Beranda
+            2. Lihat metrik (Accuracy, AUC, F1, MCC)
+            3. Lihat dataset overview (total video, kelas, split)
+            4. Scroll untuk ROC Curve, Confusion Matrix, Attention Weights
+            """)
+
+        with st.expander("2. Exploratory Data Analysis"):
+            st.markdown("""
+            **Fungsi:** Visualisasi interaktif dataset.
+
+            **Tabs:**
+            - **Label Distribution** — Bar chart & pie chart distribusi kelas
+            - **Source Analysis** — Distribusi per sumber data
+            - **Split Analysis** — Distribusi train/val/test
+            - **PCA Visualization** — 2D PCA (2000 sample, ~30 detik loading)
+            - **t-SNE Visualization** — 2D t-SNE (1000 sample, ~30 detik)
+            """)
+
+        with st.expander("3. Demo Model"):
+            st.markdown("""
+            **Fungsi:** Prediksi interaktif dengan video asli atau fitur dataset.
+
+            **Tabs:**
+            - **Video Demo** — Pilih video Rusuh -> klik Predict -> lihat gauge chart + segment scores. Video diputar langsung.
+            - **Feature Demo** — Pilih sample Normal/Rusuh -> Predict -> lihat hasil + segment scores
+            - **Batch Test Set** — Run Batch Evaluation -> evaluasi 559 test video -> ROC, CM, report
+            """)
+
+        with st.expander("4. Evaluasi & Interpretasi"):
+            st.markdown("""
+            **Fungsi:** Metrik evaluasi detail dan interpretasi model.
+
+            **Tabs:**
+            - **Model Evaluation** — Semua metrik, ROC, CM, PR curve, score distribution
+            - **Model Interpretation** — Attention weights, ablation, score evolution
+            - **About Model** — Arsitektur lengkap, training details
+            """)
+
+        with st.expander("5. Dokumentasi (halaman ini)"):
+            st.markdown("""
+            **Fungsi:** Dokumentasi lengkap dataset, metodologi, cara pakai, referensi.
+
+            **Tabs:**
+            - Dataset — Penjelasan dataset dan preprocessing
+            - Metodologi — Pipeline dan arsitektur
+            - Cara Penggunaan — Panduan per halaman
+            - Referensi — Daftar pustaka
+            """)
+
+        st.subheader("Tips")
+        st.markdown("""
+        - PCA & t-SNE butuh waktu loading (~30 detik)
+        - Batch Test Set proses 559 video (~2-3 menit)
+        - Video Demo hanya untuk format H.264 (didukung browser)
+        - Gunakan sidebar untuk navigasi
+        """)
+
+    with tab_ref:
+        st.header("Referensi")
+
+        st.subheader("Dataset")
+        st.markdown("""
+        - UCF Crime: https://www.crcv.ucf.edu/projects/real-world/
+        - SCVD: Surveillance Camera Violence Dataset
+        - MSV-PG: Moderating Severe Violence - Playground
+        - Real Life Nonviolence Dataset
+        - YouTube & Instagram: Scraped untuk riset
+        """)
+
+        st.subheader("Papers")
+        st.markdown("""
+        - Ilse, M., Tomczak, J.M., & Welling, M. (2018). Attention-based Deep Multiple Instance Learning. ICML.
+        - Xie, S., Sun, C., Huang, J., Tu, Z., & Murphy, K. (2018). Rethinking Spatiotemporal Feature Learning. ECCV.
+        - Chen, T., & Guestrin, C. (2016). XGBoost: A Scalable Tree Boosting System. KDD.
+        - Lundberg, S.M., & Lee, S.I. (2017). A Unified Approach to Interpreting Model Predictions. NeurIPS.
+        """)
+
+        st.subheader("Tools")
+        st.markdown("""
+        - Python 3.14 | PyTorch | Streamlit | Scikit-learn | XGBoost | SHAP
+        - OpenCV | Pandas | NumPy | Matplotlib | Seaborn | Plotly
+        - torchvision (S3D pretrained on Kinetics-400)
+        """)
+
+        st.subheader("Mata Kuliah")
+        st.markdown("""
+        - UAS Machine Learning — Teknik Informatika
+        - Universitas Dian Nuswantoro — Genap 2025/2026
         """)
