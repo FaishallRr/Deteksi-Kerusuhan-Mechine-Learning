@@ -86,3 +86,7 @@ data/
 
 # Temp scripts
 temp_*.py
+
+# Large video files
+test_videos/*.mp4
+test_videos/*.jpg
