@@ -524,33 +524,40 @@ elif page == "Demo Model":
                     show_bbox = st.checkbox("Tampilkan Bounding Box (YOLO)", key="bbox_demo")
 
                     if show_bbox and video_path.exists():
-                        yolo = load_yolo()
-                        cap = cv2.VideoCapture(str(video_path))
-                        total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-                        total = min(total, 150)
-                        frames_bb = []
-                        bprog = st.progress(0)
-                        for fi in range(total):
-                            ret, fr = cap.read()
-                            if not ret:
-                                break
-                            persons = detect_persons_yolo(fr, yolo)
-                            fr = draw_person_boxes(fr, persons)
-                            frames_bb.append(fr)
-                            bprog.progress((fi + 1) / total)
-                        cap.release()
+                        try:
+                            yolo = load_yolo()
+                            cap = cv2.VideoCapture(str(video_path))
+                            total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+                            total = min(total, 60)
+                            frames_bb = []
+                            bprog = st.progress(0, text="Memproses bounding box...")
+                            for fi in range(total):
+                                ret, fr = cap.read()
+                                if not ret:
+                                    break
+                                persons = detect_persons_yolo(fr, yolo)
+                                fr = draw_person_boxes(fr, persons)
+                                frames_bb.append(fr)
+                                bprog.progress((fi + 1) / total)
+                            cap.release()
 
-                        if frames_bb:
-                            out_p = str(video_path).replace(".mp4", "_bbox.mp4")
-                            h, w = frames_bb[0].shape[:2]
-                            out = cv2.VideoWriter(out_p, cv2.VideoWriter_fourcc(*"mp4v"),
-                                                 15, (w, h))
-                            for f in frames_bb:
-                                out.write(f)
-                            out.release()
-                            st.video(out_p)
-                            os.unlink(out_p)
-                        else:
+                            if frames_bb:
+                                out_p = str(video_path).replace(".mp4", "_bbox.mp4")
+                                h, w = frames_bb[0].shape[:2]
+                                out = cv2.VideoWriter(
+                                    out_p,
+                                    cv2.VideoWriter_fourcc(*"mp4v"),
+                                    15, (w, h)
+                                )
+                                for f in frames_bb:
+                                    out.write(f)
+                                out.release()
+                                st.video(out_p)
+                                os.unlink(out_p)
+                            else:
+                                st.video(str(video_path))
+                        except Exception as e:
+                            st.info(f"Bounding box tidak dapat diproses: {e}. Menampilkan video asli.")
                             st.video(str(video_path))
                     elif video_path.exists():
                         st.video(str(video_path))
