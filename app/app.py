@@ -18,6 +18,7 @@ from pathlib import Path
 from collections import Counter
 from PIL import Image
 
+import cv2
 import torch
 from sklearn.metrics import roc_auc_score, roc_curve, confusion_matrix, classification_report
 from sklearn.decomposition import PCA
