@@ -528,34 +528,29 @@ elif page == "Demo Model":
                             yolo = load_yolo()
                             cap = cv2.VideoCapture(str(video_path))
                             total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-                            total = min(total, 60)
+                            step = max(1, total // 20)
                             frames_bb = []
                             bprog = st.progress(0, text="Memproses bounding box...")
-                            for fi in range(total):
+                            for fi in range(0, min(total, 200), step):
+                                cap.set(cv2.CAP_PROP_POS_FRAMES, fi)
                                 ret, fr = cap.read()
                                 if not ret:
                                     break
                                 persons = detect_persons_yolo(fr, yolo)
                                 fr = draw_person_boxes(fr, persons)
-                                frames_bb.append(fr)
-                                bprog.progress((fi + 1) / total)
+                                fr_rgb = cv2.cvtColor(fr, cv2.COLOR_BGR2RGB)
+                                frames_bb.append(fr_rgb)
+                                bprog.progress((fi + step) / min(total, 200))
                             cap.release()
 
+                            st.video(str(video_path))
                             if frames_bb:
-                                out_p = str(video_path).replace(".mp4", "_bbox.mp4")
-                                h, w = frames_bb[0].shape[:2]
-                                out = cv2.VideoWriter(
-                                    out_p,
-                                    cv2.VideoWriter_fourcc(*"mp4v"),
-                                    15, (w, h)
-                                )
-                                for f in frames_bb:
-                                    out.write(f)
-                                out.release()
-                                st.video(out_p)
-                                os.unlink(out_p)
-                            else:
-                                st.video(str(video_path))
+                                st.markdown("**Sample Frame dengan Bounding Box:**")
+                                n_cols = min(5, len(frames_bb))
+                                cols = st.columns(n_cols)
+                                for i, col in enumerate(cols):
+                                    idx = i * len(frames_bb) // n_cols
+                                    col.image(frames_bb[idx], caption=f"Frame {idx * step}", use_container_width=True)
                         except Exception as e:
                             st.info(f"Bounding box tidak dapat diproses: {e}. Menampilkan video asli.")
                             st.video(str(video_path))
