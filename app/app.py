@@ -530,8 +530,9 @@ elif page == "Demo Model":
                             total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
                             step = max(1, total // 20)
                             frames_bb = []
+                            n_total = min(total, 200)
                             bprog = st.progress(0, text="Memproses bounding box...")
-                            for fi in range(0, min(total, 200), step):
+                            for fi in range(0, n_total, step):
                                 cap.set(cv2.CAP_PROP_POS_FRAMES, fi)
                                 ret, fr = cap.read()
                                 if not ret:
@@ -540,7 +541,7 @@ elif page == "Demo Model":
                                 fr = draw_person_boxes(fr, persons)
                                 fr_rgb = cv2.cvtColor(fr, cv2.COLOR_BGR2RGB)
                                 frames_bb.append(fr_rgb)
-                                bprog.progress((fi + step) / min(total, 200))
+                                bprog.progress(min(1.0, (fi + step) / n_total))
                             cap.release()
 
                             st.video(str(video_path))
