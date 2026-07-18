@@ -12,5 +12,4 @@ Pillow>=10.0.0
 scipy>=1.10.0
 tqdm>=4.65.0
 xgboost>=2.0.0
-shap>=0.44.0
 ultralytics>=8.0.0
