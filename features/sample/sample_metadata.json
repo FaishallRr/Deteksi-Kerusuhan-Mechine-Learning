@@ -1,0 +1,82 @@
+[
+  {
+    "path": "features/sample/sample_normal_00.npy",
+    "label": 0,
+    "label_name": "normal",
+    "split": "test",
+    "segments": 16,
+    "source": "sample"
+  },
+  {
+    "path": "features/sample/sample_normal_01.npy",
+    "label": 0,
+    "label_name": "normal",
+    "split": "test",
+    "segments": 16,
+    "source": "sample"
+  },
+  {
+    "path": "features/sample/sample_normal_02.npy",
+    "label": 0,
+    "label_name": "normal",
+    "split": "test",
+    "segments": 16,
+    "source": "sample"
+  },
+  {
+    "path": "features/sample/sample_normal_03.npy",
+    "label": 0,
+    "label_name": "normal",
+    "split": "test",
+    "segments": 16,
+    "source": "sample"
+  },
+  {
+    "path": "features/sample/sample_normal_04.npy",
+    "label": 0,
+    "label_name": "normal",
+    "split": "test",
+    "segments": 16,
+    "source": "sample"
+  },
+  {
+    "path": "features/sample/sample_rusuh_00.npy",
+    "label": 1,
+    "label_name": "rusuh",
+    "split": "test",
+    "segments": 16,
+    "source": "sample"
+  },
+  {
+    "path": "features/sample/sample_rusuh_01.npy",
+    "label": 1,
+    "label_name": "rusuh",
+    "split": "test",
+    "segments": 16,
+    "source": "sample"
+  },
+  {
+    "path": "features/sample/sample_rusuh_02.npy",
+    "label": 1,
+    "label_name": "rusuh",
+    "split": "test",
+    "segments": 16,
+    "source": "sample"
+  },
+  {
+    "path": "features/sample/sample_rusuh_03.npy",
+    "label": 1,
+    "label_name": "rusuh",
+    "split": "test",
+    "segments": 16,
+    "source": "sample"
+  },
+  {
+    "path": "features/sample/sample_rusuh_04.npy",
+    "label": 1,
+    "label_name": "rusuh",
+    "split": "test",
+    "segments": 16,
+    "source": "sample"
+  }
+]

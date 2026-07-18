@@ -157,6 +157,19 @@ def draw_person_boxes(frame, boxes):
                     cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
     return frame
 
+@st.cache_data
+def get_test_items():
+    """Get test items with fallback to sample features if originals unavailable."""
+    _, meta = load_metadata()
+    items = [m for m in meta if m["split"] == "test"]
+    if items and not Path(items[0]["path"]).exists():
+        sample_path = Path("features/sample/sample_metadata.json")
+        if sample_path.exists():
+            with open(sample_path) as f:
+                items = json.load(f)
+    return items
+
+
 def predict_upload_video(video_path, model, s3d, yolo):
     import cv2
     cap = cv2.VideoCapture(video_path)
@@ -624,14 +637,19 @@ elif page == "Demo Model":
 
     # ===== FEATURE DEMO TAB (559 test items) =====
     with tab_feature:
-        st.markdown("### Demo dengan 559 Video Test")
+        test_items = get_test_items()
+        if not test_items:
+            st.warning("File fitur tidak tersedia. Sample data juga belum dibuat.")
+            st.stop()
+        using_sample = "sample" in test_items[0].get("source", "")
+        if using_sample:
+            st.info("Dataset asli tidak tersedia. Menggunakan sample data (10 video) untuk demo.")
+
+        st.markdown("### Demo dengan {} Video Test".format(len(test_items)))
         st.markdown(
             "Pilih sample dari dataset (fitur S3D yang sudah diekstrak). "
             "Model memproses dan menampilkan hasil prediksi."
         )
-
-        df, meta = load_metadata()
-        test_items = [m for m in meta if m["split"] == "test"]
 
         normal_items = [m for m in test_items if m["label"] == 0]
         rusuh_items = [m for m in test_items if m["label"] == 1]
@@ -723,7 +741,13 @@ elif page == "Demo Model":
             progress = st.progress(0)
             status = st.empty()
 
-            test_items_batch = [m for m in meta if m["split"] == "test"]
+            test_items_batch = get_test_items()
+            if not test_items_batch:
+                st.warning("File fitur tidak tersedia.")
+                st.stop()
+            using_sample = "sample" in test_items_batch[0].get("source", "")
+            if using_sample:
+                st.info("Dataset asli tidak tersedia. Menggunakan sample data (10 video).")
             y_true, y_score_batch = [], []
 
             for i, item in enumerate(test_items_batch):
