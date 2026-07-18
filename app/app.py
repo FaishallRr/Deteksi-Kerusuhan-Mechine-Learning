@@ -1069,11 +1069,12 @@ elif page == "Evaluasi & Interpretasi":
         ```
 
         **Training Details:**
-        - Optimizer: Adam
+        - Optimizer: AdamW
         - Loss: Binary Cross-Entropy
-        - Epochs: 50 (with early stopping)
-        - Batch size: 32
+        - Epochs: 100 (with early stopping, patience=20)
+        - Batch size: 256
         - Learning rate: 0.001
+        - Weight decay: 1e-5
         - Data split: 80/10/10
 
         **Feature Extractor:** S3D (Separable 3D CNN) - pretrained on Kinetics-400
@@ -1194,17 +1195,17 @@ elif page == "Dokumentasi":
         col_tr1, col_tr2 = st.columns(2)
         with col_tr1:
             st.markdown("""
-            - Optimizer: Adam (lr=0.001)
+            - Optimizer: AdamW (lr=0.001)
             - Loss: Binary Cross-Entropy
-            - Batch Size: 32
-            - Epochs: 50 (early stopping)
+            - Batch Size: 256
+            - Epochs: 100 (early stopping, patience=20)
             - Data Split: 80/10/10
             - Device: CPU/GPU
             """)
         with col_tr2:
             st.markdown("""
-            - Weight Decay: 1e-4
-            - Early Stopping Patience: 10
+            - Weight Decay: 1e-5
+            - Early Stopping Patience: 20
             - Best Val AUC: 0.9563
             - Best Val Accuracy: 89.09%
             - Augmentasi: Weather augmentation
